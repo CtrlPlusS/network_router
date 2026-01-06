@@ -1,11 +1,30 @@
-# 1. 빌드 부산물 폴더 통째로 무시 (가장 중요)
+# 1. 빌드 디렉토리 (가장 중요)
 build/
 
-# 2. 혹시 루트에서 컴파일했을 때 생길 수 있는 실행 파일 무시
-sniffer
+# 2. 실행 파일 (Binary)
 
-# 3. VS Code 설정 파일 무시 (개인 설정이므로 공유 비추천)
+# CMakeLists.txt에 의해 생성되는 메인 실행 파일
+router_engine
+
+# playground의 연습용 폴더와 실행 파일들 (접두사 practice_로 시작)
+practice/
+practice_*
+
+# 혹시 모를 기본 출력 파일
+a.out
+
+# 3. IDE 및 에디터 설정
 .vscode/
+.idea/
+*.swp
+*~
 
-# 4. OS 관련 자동 생성 파일
+# 4. OS 및 시스템 자동 생성 파일
 .DS_Store
+Thumbs.db
+
+# 5. CMake 임시 파일 (혹시 build 폴더가 아닌 루트에서 cmake를 실행했을 경우 대비)
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
