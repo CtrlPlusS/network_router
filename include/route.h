@@ -8,7 +8,4 @@ struct ROUTE_ENTRY {
     char interface[16];  // 출구 인터페이스 이름
     int metric;        // 메트릭 값
 };
-
-struct ROUTE_ENTRY routing_table(uint32_t src);
-
 #endif
