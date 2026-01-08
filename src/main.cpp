@@ -9,15 +9,19 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <net/if.h>
+#include <linux/if_packet.h>
 
 #include "./packets.h"
-#include "./packet_read.cpp"
-#include "./common.cpp"
+#include "./packet_read.h"
+#include "./packet_send.h"
+#include "./common.h"
 #include "./route.h"
 
 using namespace std;
 
 extern std::vector<ROUTE_ENTRY> routing_table;
+extern struct MAC_ADDRESS mac_lan;
+extern struct MAC_ADDRESS mac_wan;
 bool debug_mode = true;
 
 int main(){
@@ -40,42 +44,49 @@ int main(){
 
     // 패킷 수신
     char buffer[65536];
+    const char* interface_name = "enxb0386cf1284b";
     struct ETH_HEADER *eth = nullptr;
+    struct sockaddr_ll saddr;
+    socklen_t saddr_len;
+
     routing_table_init();
     
     while(true){
+        saddr_len = sizeof(saddr);
         // 버퍼 크기만큼 패킷 수신
-        ssize_t sock_data = recvfrom(sock_raw, buffer, sizeof(buffer), 0, nullptr, nullptr);
+        ssize_t sock_data = recvfrom(sock_raw, buffer, sizeof(buffer), 0, (struct sockaddr*)&saddr, &saddr_len);
+        
         if(sock_data < 0){
             print_errno_message("Error in recvfrom : ");
             continue;
         }
-        eth = reinterpret_cast<struct ETH_HEADER*>(buffer);
 
-        uint16_t ptype = ntohs(eth->ethertype);
-        
-        const char* interface_name = "veth-router";
-        if(!if_nametoindex(interface_name)){
+        if(saddr.sll_pkttype == PACKET_OUTGOING || saddr.sll_pkttype == PACKET_LOOPBACK){
+            //송신 패킷인 경우
             continue;
         }
 
-        // struct sockaddr_ll sll;
-        // memset(&sll, 0, sizeof(sll));
-        // sll.sll_family = AF_PACKET;
-        // sll.sll_ifindex = if_nametoindex(interface_name);
-        // sll.sll_protocol = htons(0x0003);
+        eth = reinterpret_cast<struct ETH_HEADER*>(buffer);
 
-        // if(bind(sock_raw, reinterpret_cast<struct sockaddr*>(&sll), sizeof(sll)) < 0){
-        //     print_errno_message("Error in bind : ");
-        //     continue;
-        // }
+        // MAC주소 확인해서 내꺼면 무시
+        if(memcmp(eth->source_mac, mac_lan.mac, 6) == 0){
+            continue;
+        }
+
+        if(memcmp(eth->source_mac, mac_wan.mac, 6) == 0){
+            continue;
+        }
+
+        uint16_t ptype = ntohs(eth->ethertype);
 
         switch(ptype){
             case ETH_HEADER_CONSTANTS::ETH_P_IP:{
-                struct IPV4_HEADER* ipv4_packet = ipv4_read_handler(buffer);
-                if(ipv4_packet->protocol != 1) // ICMP 프로토콜만 처리
+                uint32_t gateway = ipv4_read_handler(buffer);
+                if(gateway == 0){
+                    // 목적지가 로컬인 경우 처리 생략
                     break;
-                ipv4_send_handler();
+                }
+                eth_send_handler(sock_raw, buffer, gateway, sock_data);
                 break;
             }
             case ETH_HEADER_CONSTANTS::ETH_P_ARP:{

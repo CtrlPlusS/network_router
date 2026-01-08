@@ -1,41 +1,52 @@
-// #include "./packets.h"
-// #include "./common.cpp"
-#include "./route.cpp"
-#include "./packet_send.cpp"
+#include <iostream>
+#include <arpa/inet.h>
+
+#include "./packet_read.h"
+#include "./route.h"
 
 extern bool debug_mode;
 
-struct IPV4_HEADER* ipv4_read_handler(char* buffer){
-    struct IPV4_HEADER *ipv4 = reinterpret_cast<struct IPV4_HEADER*>(buffer + sizeof(struct ETH_HEADER));
-    ipv4_send_handler(ipv4);
+uint32_t ipv4_read_handler(char* buffer){
+    struct IPV4_HEADER *ipv4_packet = reinterpret_cast<struct IPV4_HEADER*>(buffer + sizeof(struct ETH_HEADER));
 
-    if (debug_mode){
-        uint32_t src_ip = htonl(ipv4->source_ip);
-        uint32_t dst_ip = htonl(ipv4->destination_ip);
-        uint32_t dest = htonl(route.destination);
-        uint32_t gate = htonl(route.gateway);
+    if(ipv4_packet->time_to_live <= 1){ // TTL 만료 시 패킷 드롭
+        if(debug_mode){
+            printf("TTL expired, dropping packet\n");
+        }
+        return 0;
+    }
 
-        printf("[ipv4] Src : %d.%d.%d.%d -> Dst : %d.%d.%d.%d (Match %d.%d.%d.%d via %d.%d.%d.%d dev %s)\n",
-            src_ip >> 24 & 0xFF,
-            src_ip >> 16 & 0xFF,
-            src_ip >> 8 & 0xFF,
-            src_ip & 0xFF,
-            dst_ip >> 24 & 0xFF,
-            dst_ip >> 16 & 0xFF,
-            dst_ip >> 8 & 0xFF,
-            dst_ip & 0xFF,
-            dest >> 24 & 0xFF,
-            dest >> 16 & 0xFF,
-            dest >> 8 & 0xFF,
-            dest & 0xFF,
-            gate >> 24 & 0xFF,
-            gate >> 16 & 0xFF,
-            gate >> 8 & 0xFF,
-            gate & 0xFF,
-            route.interface);
-    } // 디버그용 출력
+    if(ipv4_packet->destination_ip == inet_addr("192.168.0.11")){ // 라우터 자신의 IP 주소
+        if(debug_mode){
+            printf("Packet destined for router, dropping packet\n");
+        }
+        return 0; // 라우터 자신으로 향하는 패킷 드롭
+    }
 
-    return *ipv4;
+    ipv4_packet->time_to_live--;
+    ipv4_packet->header_checksum = 0;
+
+    // checksum 계산
+    uint16_t *entries = (uint16_t*)(ipv4_packet);
+    uint32_t checksum = 0;
+
+    uint8_t count = (ipv4_packet->version_ihl & 0x0F) * 2; // IHL 필드로 헤더 길이(16비트 단위) 계산
+    while(count--){
+        checksum += *entries++;
+    }
+
+    while(checksum >> 16){
+        checksum = (checksum & 0xFFFF) + (checksum >> 16);
+    }
+
+    ipv4_packet->header_checksum = (uint16_t)(~checksum);
+
+    // if(debug_mode){
+    //     printf("0x%04x\n", ntohs(ipv4_packet->header_checksum));
+    // }
+
+    struct ROUTE_ENTRY route = routing_table_find(ipv4_packet->destination_ip);
+    return route.gateway;
 }
 
 struct ARP_HEADER arp_read_handler(char* buffer){

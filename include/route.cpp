@@ -1,3 +1,4 @@
+#include <iostream>
 #include <vector>
 #include <algorithm>
 #include <arpa/inet.h>
@@ -11,7 +12,7 @@ struct ROUTE_ENTRY default_gateway = {
     .destination = inet_addr("0.0.0.0"),
     .netmask = inet_addr("0.0.0.0"),
     .gateway = inet_addr("10.0.0.1"),
-    .interface = "veth-router",
+    .interface = "enxb0386cf1284b",
     .metric = 99
 };
 
@@ -30,14 +31,14 @@ void routing_table_init() {
         .destination = inet_addr("10.0.0.0"),
         .netmask = inet_addr("255.255.255.0"),
         .gateway = inet_addr("0.0.0.0"),
-        .interface = "veth-router",
+        .interface = "enxb0386cf1284b",
         .metric = 1
     }); // 10.0.0.0/24
     routing_table.push_back({
         .destination = inet_addr("8.8.8.0"),
         .netmask = inet_addr("255.255.255.0"),
-        .gateway = inet_addr("10.0.0.2"),
-        .interface = "veth-router",
+        .gateway = inet_addr("192.168.0.1"),
+        .interface = "wlan0",
         .metric = 10
     }); // 8.8.8.0/24 (외부망 테스트)
 

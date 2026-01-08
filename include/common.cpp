@@ -3,6 +3,7 @@
 #include <system_error>
 #include <string>
 
+#include "./common.h"
 #include "./packets.h"
 
 using namespace std;

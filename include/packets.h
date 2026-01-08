@@ -1,13 +1,10 @@
 #ifndef packets_header
 #define packets_header
-struct sockaddr_ll {
-    uint16_t sll_family;   // Address family
-    uint16_t sll_protocol; // Protocol
-    int32_t  sll_ifindex;  // Interface index
-    uint16_t sll_hatype;   // ARP hardware type
-    uint8_t  sll_pkttype;  // Packet type
-    uint8_t  sll_halen;    // Length of address
-    uint8_t  sll_addr[8];  // Physical layer address
+
+#include <cstdint>
+
+struct MAC_ADDRESS {
+    uint8_t mac[6];
 };
 
 struct ETH_HEADER { // Ethernet II 프레임 헤더
@@ -15,6 +12,8 @@ struct ETH_HEADER { // Ethernet II 프레임 헤더
     uint8_t source_mac[6];
     uint16_t ethertype;
 } __attribute__((packed));
+
+#define ETH_ALEN 6 /* Octets in one ethernet addr */
 
 enum ETH_HEADER_CONSTANTS : uint16_t {
     ETH_P_IP = 0x0800,   // IPv4

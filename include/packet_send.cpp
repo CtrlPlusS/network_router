@@ -1,77 +1,89 @@
 #include <iostream>
+#include <cstring>
+#include <map>
 
-#include "./route.cpp"
+#include <arpa/inet.h>
+#include <net/if.h>
+#include <linux/if_packet.h>
+
+#include "./packet_send.h"
+#include "./common.h"
 #include "./packets.h"
 
 extern bool debug_mode;
 
-uint8_t my_mac[6] = {0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0x01};
+std::map<uint32_t, struct MAC_ADDRESS> arp_table;
+struct MAC_ADDRESS mac_lan = {0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0x01};
+struct MAC_ADDRESS mac_wan = {0x2c, 0xcf, 0x67, 0x2e, 0x1f, 0x85};
 
-void ipv4_send_handler(struct ETH_HEADER* eth_header, struct IPV4_HEADER* ipv4_packet){
-    /*
-    void ipv4_update_checksum_incremental(struct iphdr* ip_header) {
-    // 1. 기존 체크섬 값을 32비트로 읽어옴 (Carry 처리를 위해)
-    uint32_t sum = ip_header->check; // Network Byte Order 그대로 사용
+void init_mac_address(uint8_t mac[6]){
+    arp_table.clear();
 
-    // 2. TTL 변경 반영
-    // TTL은 16비트 워드의 상위 바이트에 위치하므로, 
-    // TTL - 1은 16비트 정수에서 0x0100을 빼는 것과 같음.
-    // 데이터 합이 줄었으니, 반전된 체크섬은 반대로 0x0100을 더해줌.
-    sum += htons(0x0100); 
-
-    // 3. 캐리(Carry) 처리 (Folding)
-    // 덧셈 결과가 0xFFFF를 넘어가면 다시 더해줌
-    sum = (sum & 0xFFFF) + (sum >> 16);
-    
-    // 4. 저장
-    ip_header->check = (uint16_t)sum;
-    }
-    */
-
-    if(debug_mode){
-        printf("Checksum before: 0x%04x -> ", ntohs(ipv4_packet->header_checksum));
-    }
-
-    // TTL 감소, checksum 재계산
-    ipv4_packet->time_to_live--;
-    ipv4_packet->header_checksum = 0;
-
-    // checksum 계산
-    uint16_t *entries = (uint16_t*)(ipv4_packet);
-    uint32_t checksum = 0;
-
-    uint8_t count = (ipv4_packet->version_ihl & 0x0F) * 2; // IHL 필드로 헤더 길이(16비트 단위) 계산
-    while(count--){
-        checksum += *entries++;
-    }
-
-    while(checksum >> 16){
-        checksum = (checksum & 0xFFFF) + (checksum >> 16);
-    }
-
-    ipv4_packet->header_checksum = (uint16_t)(~checksum);
-
-    if(debug_mode){
-        printf("Checksum after: 0x%04x\n", ntohs(ipv4_packet->header_checksum));
-    }
-    
-    
+    // 192.168.0.1              ether   90:9f:33:df:7b:98   C                     wlan0
+    // 10.0.0.2                 ether   00:2b:67:fe:96:4e   CM                    enxb0386cf1284b
+    arp_table[inet_addr("192.168.0.1")] = {0x90, 0x9f, 0x33, 0xdf, 0x7b, 0x98}; // wlan0 MAC 주소
+    arp_table[inet_addr("0.0.0.0")] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff}; // 브로드캐스트 주소
+    arp_table[inet_addr("10.0.0.2")] = {0x00, 0x2b, 0x67, 0xfe, 0x96, 0x4e}; // enxb0386cf1284b
 }
 
-int forward_ipv4_packet(int sock_raw, struct ETH_HEADER* eth_header, struct IPV4_HEADER* ipv4_packet){
-    uint8_t target_mac[6] = {0xaa, 0xbb, 0xcc, 0xdd, 0xee, 02}; // 나중에 ARP 테이블에서 조회
-    struct ROUTE_ENTRY route = srouting_table_find(ipv4_packet->destination_ip);
+/**
+ * @brief IP 주소에 해당하는 MAC 주소를 반환합니다.
+ * @param ip_address IP 주소
+ * @return MAC 주소
+ */
+struct MAC_ADDRESS* get_mac_address(uint32_t ip_address){
+    if(arp_table.find(ip_address) != arp_table.end()){
+        return &arp_table[ip_address];
+    }
+    return &arp_table[inet_addr("0.0.0.0")]; // 브로드캐스트 주소 반환
+}
 
-    memcpy(eth_header->source_mac, my_mac, 6);
-    memcpy(eth_header->destination_mac, target_mac, 6);
+void eth_send_handler(int sock_raw, char* buffer, uint32_t next_hop_ip, size_t packet_len){
+    struct ETH_HEADER *eth = reinterpret_cast<struct ETH_HEADER*>(buffer);
+    struct ARP_HEADER *arp = reinterpret_cast<struct ARP_HEADER*>(buffer + sizeof(struct ETH_HEADER));
 
-    struct sockaddr_ll sll;
-    memset(&sll, 0, sizeof(sll));
+    // 이더넷 헤더 수정
+    for(int i = 0; i < 6; i++){
+        eth->source_mac[i] = mac_lan
+    .mac[i];
+    struct MAC_ADDRESS mac_wlan = {0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0x02};
+    }
 
-    sll.sll_family = AF_PACKET;
-    sll.sll_ifindex = if_nametoindex(route.interface);
-    sll.sll_protocol = htons(ETH_HEADER_CONSTANTS::ETH_P_IP);
+    // ARP 테이블에서 목적지 MAC 주소 조회 (여기서는 임시로 브로드캐스트 주소 사용)
+    struct MAC_ADDRESS* dest_mac = get_mac_address(next_hop_ip);
 
-    if(sendto(sock_raw, 
+    for(int i = 0; i < 6; i++){
+        eth->destination_mac[i] = dest_mac->mac[i];
+    }
+
+    // 소켓 주소 설정
+    struct sockaddr_ll socket_address;
+    memset(&socket_address, 0, sizeof(socket_address));
+    socket_address.sll_family = AF_PACKET;
+    socket_address.sll_protocol = htons(ETH_HEADER_CONSTANTS::ETH_P_IP);
+    socket_address.sll_ifindex = if_nametoindex("enxb0386cf1284b");
+    socket_address.sll_halen = ETH_ALEN;
+    memcpy(socket_address.sll_addr, dest_mac->mac, 6);
+
+    // 패킷 전송
+    ssize_t sent_size = sendto(sock_raw, buffer, packet_len, 0,
+                               (struct sockaddr*)&socket_address, sizeof(socket_address));
+
+    if(sent_size < 0){
+        print_errno_message("Error in sendto : ");
+    } else {
+        //source IP and destination IP for debug message
+        struct IPV4_HEADER *ipv4_packet = reinterpret_cast<struct IPV4_HEADER*>(buffer + sizeof(struct ETH_HEADER));
+        
+        if(debug_mode){
+            char src_ip[16];
+            char dest_ip[16];
+
+            strcpy(src_ip, inet_ntoa(*(in_addr*)&ipv4_packet->source_ip));
+            strcpy(dest_ip, inet_ntoa(*(in_addr*)&ipv4_packet->destination_ip));
+
+            printf("Packet sent. %s -> %s [%d]\n",
+                src_ip, dest_ip, ipv4_packet->time_to_live);
+        }
     }
 }
