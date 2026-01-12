@@ -12,6 +12,7 @@ set(SOURCES
     include/packet_read.cpp
     include/packet_send.cpp
     include/route.cpp
+    include/router_info.cpp
 )
 
 # 실행 파일 생성

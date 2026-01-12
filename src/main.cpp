@@ -11,6 +11,7 @@
 #include <net/if.h>
 #include <linux/if_packet.h>
 
+#include "./router_info.h"
 #include "./packets.h"
 #include "./packet_read.h"
 #include "./packet_send.h"
@@ -22,9 +23,22 @@ using namespace std;
 extern std::vector<ROUTE_ENTRY> routing_table;
 extern struct MAC_ADDRESS mac_lan;
 extern struct MAC_ADDRESS mac_wan;
-bool debug_mode = true;
+
+bool debug_mode_main = false;
+
+void init_router(){
+    // 라우터 정보 초기화
+    init_router_info();
+
+    // 라우팅 테이블 초기화
+    routing_table_init();
+
+    // MAC 주소 초기화
+    init_mac_address();
+}
 
 int main(){
+    init_router();
 
     // 2계층 소켓 생성
     int sock_raw = -1;
@@ -48,8 +62,6 @@ int main(){
     struct ETH_HEADER *eth = nullptr;
     struct sockaddr_ll saddr;
     socklen_t saddr_len;
-
-    routing_table_init();
     
     while(true){
         saddr_len = sizeof(saddr);
@@ -60,22 +72,14 @@ int main(){
             print_errno_message("Error in recvfrom : ");
             continue;
         }
-
+        
+        // 내부에서 보낸 패킷은 무시
         if(saddr.sll_pkttype == PACKET_OUTGOING || saddr.sll_pkttype == PACKET_LOOPBACK){
             //송신 패킷인 경우
             continue;
         }
 
         eth = reinterpret_cast<struct ETH_HEADER*>(buffer);
-
-        // MAC주소 확인해서 내꺼면 무시
-        if(memcmp(eth->source_mac, mac_lan.mac, 6) == 0){
-            continue;
-        }
-
-        if(memcmp(eth->source_mac, mac_wan.mac, 6) == 0){
-            continue;
-        }
 
         uint16_t ptype = ntohs(eth->ethertype);
 

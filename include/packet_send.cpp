@@ -5,25 +5,26 @@
 #include <arpa/inet.h>
 #include <net/if.h>
 #include <linux/if_packet.h>
+// #include <sys/socket.h>
+// #include <netinet/in.h>
 
+#include "./router_info.h"
 #include "./packet_send.h"
 #include "./common.h"
 #include "./packets.h"
 
-extern bool debug_mode;
+bool debug_mode_packet_send = false;
 
 std::map<uint32_t, struct MAC_ADDRESS> arp_table;
-struct MAC_ADDRESS mac_lan = {0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0x01};
-struct MAC_ADDRESS mac_wan = {0x2c, 0xcf, 0x67, 0x2e, 0x1f, 0x85};
+extern struct MAC_ADDRESS mac_lan;
+extern struct MAC_ADDRESS mac_wan;
 
-void init_mac_address(uint8_t mac[6]){
+void init_mac_address(){
     arp_table.clear();
 
-    // 192.168.0.1              ether   90:9f:33:df:7b:98   C                     wlan0
-    // 10.0.0.2                 ether   00:2b:67:fe:96:4e   CM                    enxb0386cf1284b
     arp_table[inet_addr("192.168.0.1")] = {0x90, 0x9f, 0x33, 0xdf, 0x7b, 0x98}; // wlan0 MAC 주소
     arp_table[inet_addr("0.0.0.0")] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff}; // 브로드캐스트 주소
-    arp_table[inet_addr("10.0.0.2")] = {0x00, 0x2b, 0x67, 0xfe, 0x96, 0x4e}; // enxb0386cf1284b
+    arp_table[inet_addr("10.0.0.2")] = {0x00, 0x2b, 0x67, 0xfe, 0x96, 0x4e}; // 노트북 MAC 주소 
 }
 
 /**
@@ -75,7 +76,7 @@ void eth_send_handler(int sock_raw, char* buffer, uint32_t next_hop_ip, size_t p
         //source IP and destination IP for debug message
         struct IPV4_HEADER *ipv4_packet = reinterpret_cast<struct IPV4_HEADER*>(buffer + sizeof(struct ETH_HEADER));
         
-        if(debug_mode){
+        if(debug_mode_packet_send){
             char src_ip[16];
             char dest_ip[16];
 

@@ -7,13 +7,13 @@ struct MAC_ADDRESS {
     uint8_t mac[6];
 };
 
-struct ETH_HEADER { // Ethernet II 프레임 헤더
-    uint8_t destination_mac[6];
-    uint8_t source_mac[6];
-    uint16_t ethertype;
-} __attribute__((packed));
-
 #define ETH_ALEN 6 /* Octets in one ethernet addr */
+
+struct SOCKET_CONFIG{
+    int domain;
+    int type;
+    int protocol;
+} __attribute__((packed));
 
 enum ETH_HEADER_CONSTANTS : uint16_t {
     ETH_P_IP = 0x0800,   // IPv4
@@ -21,22 +21,10 @@ enum ETH_HEADER_CONSTANTS : uint16_t {
     ETH_P_IPV6 = 0x86DD  // IPv6
 };
 
-struct ARP_HEADER {
-    uint16_t htype;    // Hardware Type
-    uint16_t ptype;    // Protocol Type
-    uint8_t hlen;      // Hardware Address Length
-    uint8_t plen;      // Protocol Address Length
-    uint16_t oper;     // Operation Code
-    uint8_t sha[6];    // Sender Hardware Address
-    uint8_t spa[4];    // Sender Protocol Address
-    uint8_t tha[6];    // Target Hardware Address
-    uint8_t tpa[4];    // Target Protocol Address
-} __attribute__((packed));
-
-struct SOCKET_CONFIG{
-    int domain;
-    int type;
-    int protocol;
+struct ETH_HEADER { // Ethernet II 프레임 헤더
+    uint8_t destination_mac[6];
+    uint8_t source_mac[6];
+    uint16_t ethertype;
 } __attribute__((packed));
 
 struct IPV4_HEADER {
@@ -51,4 +39,28 @@ struct IPV4_HEADER {
     uint32_t source_ip;         // Source address
     uint32_t destination_ip;    // Destination address
 } __attribute__((packed));
+
+struct ARP_HEADER {
+    uint16_t htype;    // Hardware Type
+    uint16_t ptype;    // Protocol Type
+    uint8_t hlen;      // Hardware Address Length
+    uint8_t plen;      // Protocol Address Length
+    uint16_t oper;     // Operation Code
+    uint8_t sha[6];    // Sender Hardware Address
+    uint8_t spa[4];    // Sender Protocol Address
+    uint8_t tha[6];    // Target Hardware Address
+    uint8_t tpa[4];    // Target Protocol Address
+} __attribute__((packed));
+
+struct ICMP_HEADER {
+    // type : 1B, code : 1B, checksum: 2B
+    uint8_t type; // 0: Echo 응답, 3: 목적지 없음, 4: 발신지 억제, 5: Redirect(재지정), 8: Echo 요청, 11: 시간 초과
+    uint8_t code;
+    uint16_t checksum;
+    uint16_t identifier;
+    uint16_t sequence_number;
+} __attribute__((packed));
+
+// ipv6 헤더는 생략
+
 #endif

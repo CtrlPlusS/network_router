@@ -74,3 +74,29 @@ void print_packet_info(char* buffer){
     }
     cout << endl;
 }
+
+
+/**
+* @brief Calculate checksum for given data
+* @param data 데이터 포인터
+* @param length 데이터 길이 (바이트 단위)
+* @return 계산된 체크섬 값
+ */
+ uint16_t calculate_checksum(uint16_t* data, size_t length){
+    uint16_t *ptr = data;
+    uint32_t sum = 0;
+    
+    while(length > 1){
+        sum += *ptr++;
+        length -= 2;
+    }
+    if(length == 1){
+        sum += *(uint8_t*)ptr;
+    }
+
+    while(sum >> 16){
+        sum = (sum & 0xFFFF) + (sum >> 16);
+    }
+
+    return (uint16_t)(~sum);
+}
