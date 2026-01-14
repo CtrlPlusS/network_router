@@ -1,10 +1,10 @@
-#include <iostream>
+// #include <iostream>
 #include <unistd.h>
 #include <stdint.h>
 #include <string>
 #include <cstring>
 #include <cerrno>
-#include <system_error>
+// #include <system_error>
 
 #include <sys/socket.h>
 #include <arpa/inet.h>
@@ -17,6 +17,7 @@
 #include "./packet_send.h"
 #include "./common.h"
 #include "./route.h"
+#include "./nat.h"
 
 using namespace std;
 
@@ -25,8 +26,23 @@ extern struct MAC_ADDRESS mac_lan;
 extern struct MAC_ADDRESS mac_wan;
 
 bool debug_mode_main = false;
+bool debug_mode_common = false;
+bool debug_mode_packet_send = false;
+bool debug_mode_packet_read = true;
+bool debug_mode_route = false;
+bool debug_mode_router_info = true;
+bool debug_mode_nat = true;
 
 void init_router(){
+    printf("===== [debug mode] =====\n");
+    printf("debug_mode_main: %s\n", debug_mode_main ? "true" : "false");
+    printf("debug_mode_common: %s\n", debug_mode_common ? "true" : "false");
+    printf("debug_mode_packet_send: %s\n", debug_mode_packet_send ? "true" : "false");
+    printf("debug_mode_packet_read: %s\n", debug_mode_packet_read ? "true" : "false");
+    printf("debug_mode_route: %s\n", debug_mode_route ? "true" : "false");
+    printf("debug_mode_router_info: %s\n", debug_mode_router_info ? "true" : "false");
+    printf("debug_mode_nat: %s\n", debug_mode_nat ? "true" : "false");
+
     // 라우터 정보 초기화
     init_router_info();
 
@@ -35,6 +51,9 @@ void init_router(){
 
     // MAC 주소 초기화
     init_mac_address();
+
+    // NAT 테이블 초기화
+    init_nat_table();
 }
 
 int main(){
@@ -58,7 +77,7 @@ int main(){
 
     // 패킷 수신
     char buffer[65536];
-    const char* interface_name = "enxb0386cf1284b";
+    char* interface_name;
     struct ETH_HEADER *eth = nullptr;
     struct sockaddr_ll saddr;
     socklen_t saddr_len;
@@ -81,7 +100,17 @@ int main(){
 
         eth = reinterpret_cast<struct ETH_HEADER*>(buffer);
 
+        if(memcmp(eth->source_mac, mac_lan.mac, 6) == 0 
+            || memcmp(eth->source_mac, mac_wan.mac, 6) == 0){
+            //내부에서 보낸 패킷인 경우
+            continue;
+        }
+
         uint16_t ptype = ntohs(eth->ethertype);
+
+        if(debug_mode_main){
+            printf("[main] Packet received on interface index %d, Ethertype: 0x%04X\n", saddr.sll_ifindex, ptype);
+        }
 
         switch(ptype){
             case ETH_HEADER_CONSTANTS::ETH_P_IP:{
@@ -90,11 +119,17 @@ int main(){
                     // 목적지가 로컬인 경우 처리 생략
                     break;
                 }
-                eth_send_handler(sock_raw, buffer, gateway, sock_data);
+                eth_send_handler(sock_raw, buffer, gateway, sock_data, "enxb0386cf1284b");        
                 break;
             }
             case ETH_HEADER_CONSTANTS::ETH_P_ARP:{
-                struct ARP_HEADER arp_packet = arp_read_handler(buffer);
+                uint32_t gateway = arp_read_handler(buffer);
+                if(gateway == 0){
+                    // 목적지가 로컬인 경우 처리 생략
+                    break;
+                }
+                
+                eth_send_handler(sock_raw, buffer, gateway, sock_data, "enxb0386cf1284b");
                 break;
             }
             case ETH_HEADER_CONSTANTS::ETH_P_IPV6:{

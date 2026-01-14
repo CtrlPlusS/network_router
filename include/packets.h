@@ -27,6 +27,12 @@ struct ETH_HEADER { // Ethernet II 프레임 헤더
     uint16_t ethertype;
 } __attribute__((packed));
 
+enum IPV4_HEADER_PROTOCOL_CONSTANTS : uint8_t {
+    ICMP_PROTOCOL = 1,
+    TCP_PROTOCOL = 6,
+    UDP_PROTOCOL = 17
+};
+
 struct IPV4_HEADER {
     uint8_t version_ihl;        // Version (4 bits) + Internet header length (4 bits)
     uint8_t type_of_service;    // Type of service
@@ -62,5 +68,23 @@ struct ICMP_HEADER {
 } __attribute__((packed));
 
 // ipv6 헤더는 생략
+
+struct TCP_HEADER {
+    uint16_t source_port;
+    uint16_t destination_port;
+    uint32_t sequence_number;
+    uint32_t acknowledgment_number;
+    uint16_t data_offset_reserved_control; // Data offset (4 bits) + Reserved (6 bits) + control bits (6 bits)
+    uint16_t window;
+    uint16_t checksum;
+    uint16_t urgent_pointer;
+} __attribute__((packed));
+
+struct UDP_HEADER {
+    uint16_t source_port;
+    uint16_t destination_port;
+    uint16_t length;
+    uint16_t checksum;
+} __attribute__((packed));
 
 #endif

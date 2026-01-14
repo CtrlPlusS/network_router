@@ -16,6 +16,7 @@ a.out
 # 3. IDE 및 에디터 설정
 .vscode/
 .idea/
+.cache/
 *.swp
 *~
 

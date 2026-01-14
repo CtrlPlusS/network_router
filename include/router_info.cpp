@@ -9,6 +9,8 @@
 #include "./common.h"
 #include "./packets.h"
 
+extern bool debug_mode_router_info;
+
 struct MAC_ADDRESS mac_lan = {0xb0, 0x38, 0x6c, 0xf1, 0x28, 0x4b};
 struct MAC_ADDRESS mac_wan = {0x2c, 0xcf, 0x67, 0x2e, 0x1f, 0x85};
 
@@ -66,4 +68,19 @@ void init_router_info(){
     get_lan_ip(sock);
 
     close(sock);
+
+    if(debug_mode_router_info){
+        struct in_addr lan_addr, wan_addr;
+        lan_addr.s_addr = my_ipv4_lan_ip;
+        wan_addr.s_addr = my_ipv4_wan_ip;
+
+        printf("[router_info] MAC LAN: %02x:%02x:%02x:%02x:%02x:%02x\n",
+               mac_lan.mac[0], mac_lan.mac[1], mac_lan.mac[2],
+               mac_lan.mac[3], mac_lan.mac[4], mac_lan.mac[5]);
+        printf("[router_info] MAC WAN: %02x:%02x:%02x:%02x:%02x:%02x\n",
+               mac_wan.mac[0], mac_wan.mac[1], mac_wan.mac[2],
+               mac_wan.mac[3], mac_wan.mac[4], mac_wan.mac[5]);
+        printf("[router_info] LAN IP: %s\n", inet_ntoa(lan_addr));
+        printf("[router_info] WAN IP: %s\n", inet_ntoa(wan_addr));
+    }
 }

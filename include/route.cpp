@@ -5,7 +5,7 @@
 
 #include "./route.h"
 
-bool debug_mode_route = false;
+extern bool debug_mode_route;
 
 std::vector<ROUTE_ENTRY> routing_table;
 struct ROUTE_ENTRY default_gateway = {
@@ -49,7 +49,7 @@ void routing_table_init() {
     });
 
     if(debug_mode_route){
-        printf("=== Routing Table ===\n");
+        printf("[route] === Routing Table ===\n");
         for(const auto& entry : routing_table){
             uint32_t dest = htonl(entry.destination);
             uint32_t mask = htonl(entry.netmask);

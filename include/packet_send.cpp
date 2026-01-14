@@ -1,4 +1,4 @@
-#include <iostream>
+// #include <iostream>
 #include <cstring>
 #include <map>
 
@@ -13,7 +13,7 @@
 #include "./common.h"
 #include "./packets.h"
 
-bool debug_mode_packet_send = false;
+extern bool debug_mode_packet_send;
 
 std::map<uint32_t, struct MAC_ADDRESS> arp_table;
 extern struct MAC_ADDRESS mac_lan;
@@ -39,15 +39,12 @@ struct MAC_ADDRESS* get_mac_address(uint32_t ip_address){
     return &arp_table[inet_addr("0.0.0.0")]; // 브로드캐스트 주소 반환
 }
 
-void eth_send_handler(int sock_raw, char* buffer, uint32_t next_hop_ip, size_t packet_len){
+void eth_send_handler(int sock_raw, char* buffer, uint32_t next_hop_ip, size_t packet_len, char* interface_name){
     struct ETH_HEADER *eth = reinterpret_cast<struct ETH_HEADER*>(buffer);
-    struct ARP_HEADER *arp = reinterpret_cast<struct ARP_HEADER*>(buffer + sizeof(struct ETH_HEADER));
 
     // 이더넷 헤더 수정
     for(int i = 0; i < 6; i++){
-        eth->source_mac[i] = mac_lan
-    .mac[i];
-    struct MAC_ADDRESS mac_wlan = {0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0x02};
+        eth->source_mac[i] = mac_lan.mac[i];
     }
 
     // ARP 테이블에서 목적지 MAC 주소 조회 (여기서는 임시로 브로드캐스트 주소 사용)
@@ -62,7 +59,10 @@ void eth_send_handler(int sock_raw, char* buffer, uint32_t next_hop_ip, size_t p
     memset(&socket_address, 0, sizeof(socket_address));
     socket_address.sll_family = AF_PACKET;
     socket_address.sll_protocol = htons(ETH_HEADER_CONSTANTS::ETH_P_IP);
-    socket_address.sll_ifindex = if_nametoindex("enxb0386cf1284b");
+
+    // 
+    // socket_address.sll_ifindex = if_nametoindex("enxb0386cf1284b");
+    socket_address.sll_ifindex = if_nametoindex(interface_name);
     socket_address.sll_halen = ETH_ALEN;
     memcpy(socket_address.sll_addr, dest_mac->mac, 6);
 
@@ -77,14 +77,19 @@ void eth_send_handler(int sock_raw, char* buffer, uint32_t next_hop_ip, size_t p
         struct IPV4_HEADER *ipv4_packet = reinterpret_cast<struct IPV4_HEADER*>(buffer + sizeof(struct ETH_HEADER));
         
         if(debug_mode_packet_send){
-            char src_ip[16];
-            char dest_ip[16];
+            uint32_t src_ip = htonl(ipv4_packet->source_ip);
+            uint32_t dst_ip = htonl(ipv4_packet->destination_ip);
 
-            strcpy(src_ip, inet_ntoa(*(in_addr*)&ipv4_packet->source_ip));
-            strcpy(dest_ip, inet_ntoa(*(in_addr*)&ipv4_packet->destination_ip));
-
-            printf("Packet sent. %s -> %s [%d]\n",
-                src_ip, dest_ip, ipv4_packet->time_to_live);
+            printf("[packet_send] Packet sent. %d.%d.%d.%d -> %d.%d.%d.%d [%d]\n",
+                src_ip >> 24 & 0xFF,
+                src_ip >> 16 & 0xFF,
+                src_ip >> 8 & 0xFF,
+                src_ip & 0xFF,
+                dst_ip >> 24 & 0xFF,
+                dst_ip >> 16 & 0xFF,
+                dst_ip >> 8 & 0xFF,
+                dst_ip & 0xFF,
+                ipv4_packet->time_to_live);
         }
     }
 }
