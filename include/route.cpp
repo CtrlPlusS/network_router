@@ -11,8 +11,8 @@ std::vector<ROUTE_ENTRY> routing_table;
 struct ROUTE_ENTRY default_gateway = {
     .destination = inet_addr("0.0.0.0"),
     .netmask = inet_addr("0.0.0.0"),
-    .gateway = inet_addr("10.0.0.1"),
-    .interface = "enxb0386cf1284b",
+    .gateway = inet_addr("192.168.0.1"),
+    .interface = "wlan0",
     .metric = 99
 };
 
@@ -49,7 +49,7 @@ void routing_table_init() {
     });
 
     if(debug_mode_route){
-        printf("[route] === Routing Table ===\n");
+        printf("[route] === Routing Table(dest, mask, gate htonl 적용됨) ===\n");
         for(const auto& entry : routing_table){
             uint32_t dest = htonl(entry.destination);
             uint32_t mask = htonl(entry.netmask);

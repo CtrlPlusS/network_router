@@ -43,8 +43,14 @@ void eth_send_handler(int sock_raw, char* buffer, uint32_t next_hop_ip, size_t p
     struct ETH_HEADER *eth = reinterpret_cast<struct ETH_HEADER*>(buffer);
 
     // 이더넷 헤더 수정
+    struct MAC_ADDRESS* src_mac = &mac_lan; // 기본값
+    if(strcmp(interface_name, "wlan0") == 0) {
+        src_mac = &mac_wan;
+    }
+
+    // 선택된 MAC 주소 대입
     for(int i = 0; i < 6; i++){
-        eth->source_mac[i] = mac_lan.mac[i];
+        eth->source_mac[i] = src_mac->mac[i];
     }
 
     // ARP 테이블에서 목적지 MAC 주소 조회 (여기서는 임시로 브로드캐스트 주소 사용)
@@ -80,16 +86,7 @@ void eth_send_handler(int sock_raw, char* buffer, uint32_t next_hop_ip, size_t p
             uint32_t src_ip = htonl(ipv4_packet->source_ip);
             uint32_t dst_ip = htonl(ipv4_packet->destination_ip);
 
-            printf("[packet_send] Packet sent. %d.%d.%d.%d -> %d.%d.%d.%d [%d]\n",
-                src_ip >> 24 & 0xFF,
-                src_ip >> 16 & 0xFF,
-                src_ip >> 8 & 0xFF,
-                src_ip & 0xFF,
-                dst_ip >> 24 & 0xFF,
-                dst_ip >> 16 & 0xFF,
-                dst_ip >> 8 & 0xFF,
-                dst_ip & 0xFF,
-                ipv4_packet->time_to_live);
+            print_packet_info("[packet_send] ", buffer);
         }
     }
 }

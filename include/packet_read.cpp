@@ -28,78 +28,6 @@ extern uint32_t my_ipv4_wan_ip;
 
 struct NAT_TABLE_ENTRY void_entry = {0,0,0,0,0}; 
 
-void tcp_calculate_checksum(struct TCP_HEADER* tcp_packet, struct IPV4_HEADER* ipv4_packet){
-    tcp_packet -> checksum = 0;
-
-    uint32_t sum = 0;
-
-    {
-        uint16_t* src = (uint16_t*)&ipv4_packet->source_ip;
-        uint16_t* dst = (uint16_t*)&ipv4_packet->destination_ip;
-
-        sum += src[0] & 0xFFFF;
-        sum += src[1] & 0xFFFF;
-        sum += dst[0] & 0xFFFF;
-        sum += dst[1] & 0xFFFF;
-    }
-
-    sum += htons(ipv4_packet->protocol);
-    sum += htons(ntohs(ipv4_packet->total_length) - (ipv4_packet->version_ihl & 0x0F) * 4);
-
-    {
-        uint16_t inverted_sum = calculate_checksum((uint16_t*)tcp_packet, ntohs(ipv4_packet->total_length) - (ipv4_packet->version_ihl & 0x0F) * 4);
-        sum += ~inverted_sum;
-    }
-
-    while (sum >> 16) {
-        sum = (sum & 0xFFFF) + (sum >> 16);
-    }
-
-    sum = ~sum;
-    // if(sum == 0x0000){ // tcp는 이거 없어야함
-    //     sum = 0xFFFF;
-    // }
-
-    tcp_packet->checksum = (uint16_t)(sum & 0xFFFF);
-}
-
-void udp_calculate_checksum(struct UDP_HEADER* udp_packet, struct IPV4_HEADER* ipv4_packet){
-    udp_packet -> checksum = 0;
-
-    uint32_t sum = 0;
-
-    {
-        uint16_t* src = (uint16_t*)&ipv4_packet->source_ip;
-        uint16_t* dst = (uint16_t*)&ipv4_packet->destination_ip;
-
-        sum += src[0] & 0xFFFF;
-        sum += src[1] & 0xFFFF;
-        sum += dst[0] & 0xFFFF;
-        sum += dst[1] & 0xFFFF;
-    }
-
-    sum += htons(ipv4_packet->protocol);
-    sum += htons(ntohs(ipv4_packet->total_length) - (ipv4_packet->version_ihl & 0x0F) * 4);
-
-    {
-        uint16_t inverted_sum = calculate_checksum((uint16_t*)udp_packet, ntohs(ipv4_packet->total_length) - (ipv4_packet->version_ihl & 0x0F) * 4);
-        sum += ~inverted_sum;
-    }
-
-    while (sum >> 16) {
-        sum = (sum & 0xFFFF) + (sum >> 16);
-    }
-
-    sum = ~sum;
-    if(sum == 0x0000){ // tcp는 이거 없어야함
-        sum = 0xFFFF;
-    }
-
-    udp_packet->checksum = (uint16_t)(sum & 0xFFFF);
-}
-
-
-
 bool nat_inbound_handler(struct IPV4_HEADER* ipv4_packet){ 
     // wan->lan
     // nat장부에 있으면 true, 아니면 false
@@ -108,7 +36,7 @@ bool nat_inbound_handler(struct IPV4_HEADER* ipv4_packet){
         printf("[packet_read] nat_inbound_handler activated\n");
     }
 
-    uint32_t dst_ip = ntohl(ipv4_packet->destination_ip);
+    uint32_t dst_ip = ipv4_packet->destination_ip;
     uint16_t dst_port;
 
     switch(ipv4_packet->protocol){
@@ -123,13 +51,13 @@ bool nat_inbound_handler(struct IPV4_HEADER* ipv4_packet){
             if(memcmp(&nat_entry, &void_entry, sizeof(NAT_TABLE_ENTRY)) == 0){
                 // 포트 할당 안되어있으면 드롭
                 if(debug_mode_packet_read){
-                    printf("[packet_read] No NAT entry found for incoming TCP packet. Dropping packet.\n");
+                    printf("[packet_read] can't find %d in TCP NAT. Dropping packet.\n", key_internal);
                 }
                 return false;
             }
 
             tcp_packet->destination_port = htons(nat_entry.internal_port);
-            ipv4_packet->destination_ip = htonl(nat_entry.ip);
+            ipv4_packet->destination_ip = nat_entry.ip;
             update_table_entry_time(&nat_entry);
 
             if(debug_mode_packet_read){
@@ -139,14 +67,16 @@ bool nat_inbound_handler(struct IPV4_HEADER* ipv4_packet){
                         (ntohl(ipv4_packet->source_ip) >>  8) & 0xFF,
                         (ntohl(ipv4_packet->source_ip)         ) & 0xFF,
                         ntohs(tcp_packet->source_port),
-                        (ntohl(ipv4_packet->source_ip) >> 24) & 0xFF,
-                        (ntohl(ipv4_packet->source_ip) >> 16) & 0xFF,
-                        (ntohl(ipv4_packet->source_ip) >>  8) & 0xFF,
-                        (ntohl(ipv4_packet->source_ip)      ) & 0xFF,
+                        (ntohl(ipv4_packet->destination_ip) >> 24) & 0xFF,
+                        (ntohl(ipv4_packet->destination_ip) >> 16) & 0xFF,
+                        (ntohl(ipv4_packet->destination_ip) >>  8) & 0xFF,
+                        (ntohl(ipv4_packet->destination_ip)      ) & 0xFF,
                         ntohs(tcp_packet->destination_port));
             }
 
             tcp_calculate_checksum(tcp_packet, ipv4_packet);
+            return true;
+            // break;
         }
 
         case IPV4_HEADER_PROTOCOL_CONSTANTS::UDP_PROTOCOL:{
@@ -160,13 +90,13 @@ bool nat_inbound_handler(struct IPV4_HEADER* ipv4_packet){
             if(memcmp(&nat_entry, &void_entry, sizeof(NAT_TABLE_ENTRY)) == 0){
                 // 포트 할당 안되어있으면 드롭
                 if(debug_mode_packet_read){
-                    printf("[packet_read] No NAT entry found for incoming TCP packet. Dropping packet.\n");
+                    printf("[packet_read] can't find %d in UDP NAT. Dropping packet.\n", key_internal);
                 }
                 return false;
             }
 
             udp_packet->destination_port = htons(nat_entry.internal_port);
-            ipv4_packet->destination_ip = htonl(nat_entry.ip);
+            ipv4_packet->destination_ip = nat_entry.ip;
             update_table_entry_time(&nat_entry);
 
             if(debug_mode_packet_read){
@@ -176,18 +106,21 @@ bool nat_inbound_handler(struct IPV4_HEADER* ipv4_packet){
                         (ntohl(ipv4_packet->source_ip) >>  8) & 0xFF,
                         (ntohl(ipv4_packet->source_ip)         ) & 0xFF,
                         ntohs(udp_packet->source_port),
-                        (ntohl(ipv4_packet->source_ip) >> 24) & 0xFF,
-                        (ntohl(ipv4_packet->source_ip) >> 16) & 0xFF,
-                        (ntohl(ipv4_packet->source_ip) >>  8) & 0xFF,
-                        (ntohl(ipv4_packet->source_ip)      ) & 0xFF,
+                        (ntohl(ipv4_packet->destination_ip) >> 24) & 0xFF,
+                        (ntohl(ipv4_packet->destination_ip) >> 16) & 0xFF,
+                        (ntohl(ipv4_packet->destination_ip) >>  8) & 0xFF,
+                        (ntohl(ipv4_packet->destination_ip)      ) & 0xFF,
                         ntohs(udp_packet->destination_port));
             }
 
             udp_calculate_checksum(udp_packet, ipv4_packet);
+            return true;
+            // break;
         }
 
         default:{ // icmp?
-            break;
+            return false;
+            // break;
         }
     }
 }
@@ -240,12 +173,12 @@ void nat_outbound_handler(struct IPV4_HEADER* ipv4_packet){
                         (ntohl(ipv4_packet->source_ip) >> 24) & 0xFF,
                         (ntohl(ipv4_packet->source_ip) >> 16) & 0xFF,
                         (ntohl(ipv4_packet->source_ip) >>  8) & 0xFF,
-                        (ntohl(ipv4_packet->source_ip)         ) & 0xFF,
-                        ntohs(tcp_packet->source_port),
-                        (ntohl(ipv4_packet->source_ip) >> 24) & 0xFF,
-                        (ntohl(ipv4_packet->source_ip) >> 16) & 0xFF,
-                        (ntohl(ipv4_packet->source_ip) >>  8) & 0xFF,
                         (ntohl(ipv4_packet->source_ip)      ) & 0xFF,
+                        ntohs(tcp_packet->source_port),
+                        (ntohl(ipv4_packet->destination_ip) >> 24) & 0xFF,
+                        (ntohl(ipv4_packet->destination_ip) >> 16) & 0xFF,
+                        (ntohl(ipv4_packet->destination_ip) >>  8) & 0xFF,
+                        (ntohl(ipv4_packet->destination_ip)      ) & 0xFF,
                         ntohs(tcp_packet->destination_port));
             }
 
@@ -297,12 +230,12 @@ void nat_outbound_handler(struct IPV4_HEADER* ipv4_packet){
                         (ntohl(ipv4_packet->source_ip) >> 24) & 0xFF,
                         (ntohl(ipv4_packet->source_ip) >> 16) & 0xFF,
                         (ntohl(ipv4_packet->source_ip) >>  8) & 0xFF,
-                        (ntohl(ipv4_packet->source_ip)         ) & 0xFF,
-                        ntohs(udp_packet->source_port),
-                        (ntohl(ipv4_packet->source_ip) >> 24) & 0xFF,
-                        (ntohl(ipv4_packet->source_ip) >> 16) & 0xFF,
-                        (ntohl(ipv4_packet->source_ip) >>  8) & 0xFF,
                         (ntohl(ipv4_packet->source_ip)      ) & 0xFF,
+                        ntohs(udp_packet->source_port),
+                        (ntohl(ipv4_packet->destination_ip) >> 24) & 0xFF,
+                        (ntohl(ipv4_packet->destination_ip) >> 16) & 0xFF,
+                        (ntohl(ipv4_packet->destination_ip) >>  8) & 0xFF,
+                        (ntohl(ipv4_packet->destination_ip)      ) & 0xFF,
                         ntohs(udp_packet->destination_port));
             }
 
@@ -414,24 +347,28 @@ uint32_t ipv4_read_handler(char* buffer){
         return 0;
     }
 
-    if(debug_mode_packet_read && ipv4_packet->protocol == 6){
-        printf("[packet_read] tcp packet read! %d.%d.%d.%d -> %d.%d.%d.%d (Len: %d)\n", 
+    if(debug_mode_packet_read){
+        printf("[packet_read] packet read! %d.%d.%d.%d(%s) -> %d.%d.%d.%d(%s) (Len: %d, protocol: %d)\n", 
             (htonl(ipv4_packet->source_ip) >> 24) & 0xFF,
             (htonl(ipv4_packet->source_ip) >> 16) & 0xFF,
             (htonl(ipv4_packet->source_ip) >> 8) & 0xFF,
             (htonl(ipv4_packet->source_ip)) & 0xFF,
+            is_lan_ip(ntohl(ipv4_packet->source_ip)) ? "lan" : "wan",
             (htonl(ipv4_packet->destination_ip) >> 24) & 0xFF,
             (htonl(ipv4_packet->destination_ip) >> 16) & 0xFF,
             (htonl(ipv4_packet->destination_ip) >> 8) & 0xFF,
             (htonl(ipv4_packet->destination_ip)) & 0xFF,
-            ntohs(ipv4_packet->total_length));
+            is_lan_ip(ntohl(ipv4_packet->destination_ip)) ? "lan" : "wan",
+            ntohs(ipv4_packet->total_length),
+            ipv4_packet->protocol
+        );
     }
 
-    bool from_lan = is_lan_ip(ipv4_packet->source_ip);
+    bool from_lan = is_lan_ip(ntohl(ipv4_packet->source_ip));
     bool to_me = (ipv4_packet->destination_ip == my_ipv4_lan_ip || ipv4_packet->destination_ip == my_ipv4_wan_ip);
 
     // [3] NAT 및 라우팅 판단 (가장 중요한 분기점)
-    if (from_lan && !is_lan_ip(ipv4_packet->destination_ip)) {
+    if (from_lan && !is_lan_ip(ntohl(ipv4_packet->destination_ip))) {
         // CASE A: 내부 -> 외부 (Outbound NAT)
         nat_outbound_handler(ipv4_packet);
     } 
@@ -456,13 +393,18 @@ uint32_t ipv4_read_handler(char* buffer){
     // checksum 계산
     ipv4_packet->header_checksum = 0;
     ipv4_packet->header_checksum = calculate_checksum(
-        (uint16_t*)ipv4_packet, ipv4_packet->version_ihl * 4);
+        (uint16_t*)ipv4_packet, (ipv4_packet->version_ihl & 0x0F) * 4);
 
     // if(debug_mode_packet_read){
     //     printf("0x%04x\n", ntohs(ipv4_packet->header_checksum));
     // }
 
     struct ROUTE_ENTRY route = routing_table_find(ipv4_packet->destination_ip);
+
+    if (route.gateway == 0) {
+        return ipv4_packet->destination_ip;
+    }
+
     return route.gateway;
 }
 
@@ -478,6 +420,8 @@ uint32_t arp_read_handler(char* buffer){
     //     arp->tha[0], arp->tha[1], arp->tha[2], arp->tha[3], arp->tha[4], arp->tha[5]);
     // }
 
+    bool is_request_for_lan = (memcmp(arp->tpa, (uint8_t*)&my_ipv4_lan_ip, 4) == 0);
+
     if(arp->oper == htons(1) &&
             (memcmp(arp->tpa, (uint8_t*)&my_ipv4_lan_ip, 4) == 0 
             || memcmp(arp->tpa, (uint8_t*)&my_ipv4_wan_ip, 4) == 0)){
@@ -488,12 +432,15 @@ uint32_t arp_read_handler(char* buffer){
 
         memcpy(arp->tha, arp->sha, 6); // 대상 MAC 주소에 송신자 MAC 주소 복사
         memcpy(arp->tpa, arp->spa, 4); // 대상 IP 주소
-        memcpy(arp->sha, mac_lan.mac, 6); // 송신자 MAC 주소에 내 MAC 주소 복사
 
-        if(memcmp(arp->tpa, (uint8_t*)&my_ipv4_lan_ip, 4) == 0){
-            memcpy(arp->spa, (uint8_t*)&my_ipv4_lan_ip, 4); // 송신자 IP 주소에 내 LAN IP 복사
+        if(is_request_for_lan){
+            // LAN에서 온 요청이면 -> 내 LAN 정보로 답장
+            memcpy(arp->sha, mac_lan.mac, 6);
+            memcpy(arp->spa, (uint8_t*)&my_ipv4_lan_ip, 4);
         } else {
-            memcpy(arp->spa, (uint8_t*)&my_ipv4_wan_ip, 4); // 송신자 IP 주소에 내 WAN IP 복사
+            // WAN에서 온 요청이면 -> 내 WAN 정보로 답장
+            memcpy(arp->sha, mac_wan.mac, 6);
+            memcpy(arp->spa, (uint8_t*)&my_ipv4_wan_ip, 4);
         }
     }
  

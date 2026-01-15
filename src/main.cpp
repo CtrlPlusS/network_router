@@ -25,10 +25,10 @@ extern std::vector<ROUTE_ENTRY> routing_table;
 extern struct MAC_ADDRESS mac_lan;
 extern struct MAC_ADDRESS mac_wan;
 
-bool debug_mode_main = false;
+bool debug_mode_main = true;
 bool debug_mode_common = false;
 bool debug_mode_packet_send = false;
-bool debug_mode_packet_read = true;
+bool debug_mode_packet_read = false;
 bool debug_mode_route = false;
 bool debug_mode_router_info = true;
 bool debug_mode_nat = true;
@@ -81,8 +81,21 @@ int main(){
     struct ETH_HEADER *eth = nullptr;
     struct sockaddr_ll saddr;
     socklen_t saddr_len;
+    time_t last_cleanup_time = time(NULL); // 마지막 청소 시간
     
+    if(debug_mode_main){
+        printf("[main] loop start\n");
+    }
     while(true){
+        time_t current_time = time(NULL);
+        if (current_time - last_cleanup_time >= 1) {
+            cleanup_expired_nat_entries();
+            last_cleanup_time = current_time;
+            if(debug_mode_main){
+                printf("[main] nat clean done\n");
+            }
+        }
+
         saddr_len = sizeof(saddr);
         // 버퍼 크기만큼 패킷 수신
         ssize_t sock_data = recvfrom(sock_raw, buffer, sizeof(buffer), 0, (struct sockaddr*)&saddr, &saddr_len);
@@ -119,7 +132,13 @@ int main(){
                     // 목적지가 로컬인 경우 처리 생략
                     break;
                 }
-                eth_send_handler(sock_raw, buffer, gateway, sock_data, "enxb0386cf1284b");        
+                // eth_send_handler(sock_raw, buffer, gateway, sock_data, "enxb0386cf1284b");        
+
+                struct IPV4_HEADER *ipv4 = (struct IPV4_HEADER*)(buffer + sizeof(struct ETH_HEADER));
+                struct ROUTE_ENTRY route = routing_table_find(ipv4->destination_ip);
+                
+                // 라우팅 테이블에 적힌 올바른 인터페이스로 전송
+                eth_send_handler(sock_raw, buffer, gateway, sock_data, route.interface);
                 break;
             }
             case ETH_HEADER_CONSTANTS::ETH_P_ARP:{
@@ -129,7 +148,10 @@ int main(){
                     break;
                 }
                 
-                eth_send_handler(sock_raw, buffer, gateway, sock_data, "enxb0386cf1284b");
+                struct ARP_HEADER *arp = (struct ARP_HEADER*)(buffer + sizeof(struct ARP_HEADER));
+                struct ROUTE_ENTRY route = routing_table_find((uint32_t)*arp->tpa);
+
+                eth_send_handler(sock_raw, buffer, gateway, sock_data, route.interface);
                 break;
             }
             case ETH_HEADER_CONSTANTS::ETH_P_IPV6:{
