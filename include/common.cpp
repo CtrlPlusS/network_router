@@ -199,3 +199,12 @@ void tcp_calculate_checksum(struct TCP_HEADER *tcp, struct IPV4_HEADER *ip) {
 
     tcp->checksum = finalize_checksum(sum);
 }
+
+void icmp_calculate_checksum(struct ICMP_HEADER* icmp_packet, struct IPV4_HEADER* ipv4_packet){
+    // checksum 재계산
+        icmp_packet->checksum = 0; // 1. 먼저 0으로 초기화 (필수)
+        icmp_packet->checksum = calculate_checksum(
+            (uint16_t*)icmp_packet, // 2. ICMP 헤더 시작 주소
+            ntohs(ipv4_packet->total_length) - (ipv4_packet->version_ihl & 0x0F) * 4 // 3. IP 헤더를 뺀 순수 ICMP 길이
+        );
+}

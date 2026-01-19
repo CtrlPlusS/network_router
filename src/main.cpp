@@ -18,6 +18,7 @@
 #include "./common.h"
 #include "./route.h"
 #include "./nat.h"
+#include "./firewall.h"
 
 using namespace std;
 
@@ -25,13 +26,14 @@ extern std::vector<ROUTE_ENTRY> routing_table;
 extern struct MAC_ADDRESS mac_lan;
 extern struct MAC_ADDRESS mac_wan;
 
-bool debug_mode_main = true;
+bool debug_mode_main = false;
 bool debug_mode_common = false;
 bool debug_mode_packet_send = false;
 bool debug_mode_packet_read = false;
 bool debug_mode_route = false;
 bool debug_mode_router_info = true;
-bool debug_mode_nat = true;
+bool debug_mode_nat = false;
+bool debug_mode_firewall = true;
 
 void init_router(){
     printf("===== [debug mode] =====\n");
@@ -42,6 +44,7 @@ void init_router(){
     printf("debug_mode_route: %s\n", debug_mode_route ? "true" : "false");
     printf("debug_mode_router_info: %s\n", debug_mode_router_info ? "true" : "false");
     printf("debug_mode_nat: %s\n", debug_mode_nat ? "true" : "false");
+    printf("debug_mode_firewall: %s\n", debug_mode_firewall ? "true" : "false");
 
     // 라우터 정보 초기화
     init_router_info();
@@ -54,6 +57,9 @@ void init_router(){
 
     // NAT 테이블 초기화
     init_nat_table();
+
+    // 방화벽 테이블 초기화
+    init_firewall_table();
 }
 
 int main(){

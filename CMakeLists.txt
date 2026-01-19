@@ -14,6 +14,7 @@ set(SOURCES
     include/route.cpp
     include/router_info.cpp
     include/nat.cpp
+    include/firewall.cpp
 )
 
 # 실행 파일 생성
