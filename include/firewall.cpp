@@ -28,6 +28,15 @@ void init_firewall_table(){
     //     .destination_port = htons(80),
     //     .action = FIREWALL_ACTION_CONSTANTS::REJECT
     // });
+
+    create_firewall_entry({
+        .source_ip = 0,
+        .destination_ip = inet_addr("142.250.71.238"),
+        .protocol = IPV4_HEADER_PROTOCOL_CONSTANTS::TCP_PROTOCOL,
+        .source_port = 0,
+        .destination_port = htons(80),
+        .action = FIREWALL_ACTION_CONSTANTS::ACCEPT
+    });
 }
 
 bool check_entry (FIREWALL_TABLE_ENTRY* condition, FIREWALL_TABLE_ENTRY* entry){

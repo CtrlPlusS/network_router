@@ -26,14 +26,14 @@ extern std::vector<ROUTE_ENTRY> routing_table;
 extern struct MAC_ADDRESS mac_lan;
 extern struct MAC_ADDRESS mac_wan;
 
-bool debug_mode_main = false;
+bool debug_mode_main = true;
 bool debug_mode_common = false;
 bool debug_mode_packet_send = false;
 bool debug_mode_packet_read = false;
 bool debug_mode_route = false;
 bool debug_mode_router_info = true;
 bool debug_mode_nat = false;
-bool debug_mode_firewall = true;
+bool debug_mode_firewall = false;
 
 void init_router(){
     printf("===== [debug mode] =====\n");
@@ -127,9 +127,9 @@ int main(){
 
         uint16_t ptype = ntohs(eth->ethertype);
 
-        if(debug_mode_main){
-            printf("[main] Packet received on interface index %d, Ethertype: 0x%04X\n", saddr.sll_ifindex, ptype);
-        }
+        // if(debug_mode_main){
+        //     printf("[main] Packet received on interface index %d, Ethertype: 0x%04X\n", saddr.sll_ifindex, ptype);
+        // }
 
         switch(ptype){
             case ETH_HEADER_CONSTANTS::ETH_P_IP:{
