@@ -2,6 +2,7 @@
 #define route_header
 
 #include <vector>
+#include <cstdint>
 
 struct ROUTE_ENTRY {
     uint32_t destination; // 목적지 네트워크 주소
@@ -13,7 +14,7 @@ struct ROUTE_ENTRY {
 
 extern std::vector<ROUTE_ENTRY> routing_table;
 
-void routing_table_init();
+void init_routing_table();
 struct ROUTE_ENTRY routing_table_find(uint32_t src);
 
 #endif

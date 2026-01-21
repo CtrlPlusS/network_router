@@ -16,7 +16,7 @@ struct SOCKET_CONFIG{
 } __attribute__((packed));
 
 enum ETH_HEADER_CONSTANTS : uint16_t {
-    ETH_P_IP = 0x0800,   // IPv4
+    ETH_P_IPV4 = 0x0800,   // IPv4
     ETH_P_ARP = 0x0806,  // ARP
     ETH_P_IPV6 = 0x86DD  // IPv6
 };
@@ -87,4 +87,22 @@ struct UDP_HEADER {
     uint16_t checksum;
 } __attribute__((packed));
 
+struct DHCP_HEADER {
+    uint8_t op;            /* Message op code / 1 = BOOTREQUEST, 2 = BOOTREPLY */
+    uint8_t htype;         /* Hardware address type / 1 = Ethernet */
+    uint8_t hlen;          /* Hardware address length / Ethernet = 6 */
+    uint8_t hops;          /* Client sets to zero, optionally used by relay agents */
+    uint32_t xid;          /* Transaction ID / 랜덤 식별자 */
+    uint16_t secs;         /* Seconds elapsed since client began address acquisition or renewal */
+    uint16_t flags;        /* Flags / 0x8000 = Broadcast */
+    uint32_t ciaddr;       /* Client IP address (if already in use) */
+    uint32_t yiaddr;       /* 'Your' IP address / 서버가 제안하는 IP */
+    uint32_t siaddr;       /* Server IP address */
+    uint32_t giaddr;       /* Relay agent IP address */
+    uint8_t chaddr[16];    /* Client hardware address / 클라이언트 MAC 주소 */
+    uint8_t sname[64];     /* Server host name */
+    uint8_t file[128];     /* Boot file name */
+    uint32_t magic_cookie; /* DHCP Magic Cookie (0x63825363) */
+    uint8_t options[0];    /* Optional parameters (variable length) */
+} __attribute__((packed));
 #endif

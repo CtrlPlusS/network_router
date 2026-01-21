@@ -1,6 +1,6 @@
 #!/bin/bash
 
-LAN_IF="enxb0386cf1284b"
+LAN_IF="eth1"
 WAN_IF="wlan0"
 
 # 1. 인터페이스 활성화
@@ -20,7 +20,7 @@ iptables -t nat -F
 iptables -P FORWARD DROP # 커널은 포워딩하지 말고 버려라 (프로그램이 직접 함)
 
 # 5. ARP 수동 등록 (노트북 -> 라즈베리 파이 패킷 수신용)
-ip neigh replace 10.0.0.2 lladdr 00:2b:67:fe:96:4e dev $LAN_IF
+# ip neigh replace 10.0.0.2 lladdr 00:2b:67:fe:96:4e dev $LAN_IF
 
 sudo iptables -F
 sudo iptables -A OUTPUT -p tcp --sport 10000:65535 --tcp-flags RST RST -j DROP

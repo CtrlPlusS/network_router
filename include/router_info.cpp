@@ -35,7 +35,7 @@ void get_lan_ip(int sock){
     struct ifreq ifr;
     
     ifr.ifr_addr.sa_family = AF_INET;
-    strncpy(ifr.ifr_name, "enxb0386cf1284b", IFNAMSIZ-1); // lan interface
+    strncpy(ifr.ifr_name, "eth1", IFNAMSIZ-1); // lan interface
     if(ioctl(sock, SIOCGIFADDR, &ifr) < 0){
         print_errno_message("Error in getting LAN IP address : ");
         close(sock);

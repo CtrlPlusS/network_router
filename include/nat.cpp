@@ -9,11 +9,17 @@
 
 #include "./nat.h"
 #include "./packets.h"
+#include "./common.h"
 
 extern bool debug_mode_nat;
 
 std::unordered_map<uint64_t, NAT_TABLE_ENTRY> lan_to_wan_table; // 키: 내부 IP(32비트) + 내부 포트(16비트))
 std::unordered_map<uint32_t, NAT_TABLE_ENTRY> wan_to_lan_table; // 키: 외부 포트(16비트)
+
+struct NAT_TABLE_ENTRY void_entry = {0,0,0,0,0}; 
+
+extern uint32_t my_ipv4_lan_ip;
+extern uint32_t my_ipv4_wan_ip;
 
 uint16_t tcp_port_num; // 내부 포트 할당 시작점
 uint16_t udp_port_num; // 외부 포트 할당 시작점
@@ -197,3 +203,313 @@ void cleanup_expired_nat_entries() {
     }
 }
 
+bool nat_inbound_handler(struct IPV4_HEADER* ipv4_packet){ 
+    // wan->lan
+    // nat장부에 있으면 true, 아니면 false
+
+    uint32_t dst_ip = ipv4_packet->destination_ip;
+    uint16_t dst_port;
+
+    switch(ipv4_packet->protocol){
+        case IPV4_HEADER_PROTOCOL_CONSTANTS::TCP_PROTOCOL:{
+            struct TCP_HEADER* tcp_packet = reinterpret_cast<struct TCP_HEADER*>(
+                (uint8_t*)ipv4_packet + (ipv4_packet->version_ihl & 0x0F) * 4
+            );
+
+            uint16_t key_internal = ntohs(tcp_packet->destination_port);
+            struct NAT_TABLE_ENTRY nat_entry = find_nat_entry_by_external(IPV4_HEADER_PROTOCOL_CONSTANTS::TCP_PROTOCOL, key_internal);
+
+            if(memcmp(&nat_entry, &void_entry, sizeof(NAT_TABLE_ENTRY)) == 0){
+                // 포트 할당 안되어있으면 드롭
+                if(debug_mode_nat){
+                    printf("[packet_read] can't find %d in TCP NAT. Dropping packet.\n", key_internal);
+                }
+                return false;
+            }
+
+            tcp_packet->destination_port = htons(nat_entry.internal_port);
+            ipv4_packet->destination_ip = nat_entry.ip;
+            update_table_entry_time(&nat_entry);
+
+            if(debug_mode_nat){
+                printf("[packet_read] tcp nat_inbound activated. %d.%d.%d.%d(%d) -> %d.%d.%d.%d(%d)\n",
+                        (ntohl(ipv4_packet->source_ip) >> 24) & 0xFF,
+                        (ntohl(ipv4_packet->source_ip) >> 16) & 0xFF,
+                        (ntohl(ipv4_packet->source_ip) >>  8) & 0xFF,
+                        (ntohl(ipv4_packet->source_ip)         ) & 0xFF,
+                        ntohs(tcp_packet->source_port),
+                        (ntohl(ipv4_packet->destination_ip) >> 24) & 0xFF,
+                        (ntohl(ipv4_packet->destination_ip) >> 16) & 0xFF,
+                        (ntohl(ipv4_packet->destination_ip) >>  8) & 0xFF,
+                        (ntohl(ipv4_packet->destination_ip)      ) & 0xFF,
+                        ntohs(tcp_packet->destination_port));
+            }
+
+            tcp_calculate_checksum(tcp_packet, ipv4_packet);
+            return true;
+            // break;
+        }
+
+        case IPV4_HEADER_PROTOCOL_CONSTANTS::UDP_PROTOCOL:{
+            struct UDP_HEADER* udp_packet = reinterpret_cast<struct UDP_HEADER*>(
+                (uint8_t*)ipv4_packet + (ipv4_packet->version_ihl & 0x0F) * 4
+            );
+
+            uint16_t key_internal = ntohs(udp_packet->destination_port);
+            struct NAT_TABLE_ENTRY nat_entry = find_nat_entry_by_external(IPV4_HEADER_PROTOCOL_CONSTANTS::UDP_PROTOCOL, key_internal);
+
+            if(memcmp(&nat_entry, &void_entry, sizeof(NAT_TABLE_ENTRY)) == 0){
+                // 포트 할당 안되어있으면 드롭
+                if(debug_mode_nat){
+                    printf("[packet_read] can't find %d in UDP NAT. Dropping packet.\n", key_internal);
+                }
+                return false;
+            }
+
+            udp_packet->destination_port = htons(nat_entry.internal_port);
+            ipv4_packet->destination_ip = nat_entry.ip;
+            update_table_entry_time(&nat_entry);
+
+            if(debug_mode_nat){
+                printf("[packet_read] udp nat_inbound activated. %d.%d.%d.%d(%d) -> %d.%d.%d.%d(%d)\n",
+                        (ntohl(ipv4_packet->source_ip) >> 24) & 0xFF,
+                        (ntohl(ipv4_packet->source_ip) >> 16) & 0xFF,
+                        (ntohl(ipv4_packet->source_ip) >>  8) & 0xFF,
+                        (ntohl(ipv4_packet->source_ip)         ) & 0xFF,
+                        ntohs(udp_packet->source_port),
+                        (ntohl(ipv4_packet->destination_ip) >> 24) & 0xFF,
+                        (ntohl(ipv4_packet->destination_ip) >> 16) & 0xFF,
+                        (ntohl(ipv4_packet->destination_ip) >>  8) & 0xFF,
+                        (ntohl(ipv4_packet->destination_ip)      ) & 0xFF,
+                        ntohs(udp_packet->destination_port));
+            }
+
+            udp_calculate_checksum(udp_packet, ipv4_packet);
+            return true;
+            // break;
+        }
+
+        case IPV4_HEADER_PROTOCOL_CONSTANTS::ICMP_PROTOCOL:{
+            struct ICMP_HEADER* icmp_packet = reinterpret_cast<struct ICMP_HEADER*>(
+                (uint8_t*)ipv4_packet + (ipv4_packet->version_ihl & 0x0F) * 4
+            );
+
+            uint16_t key_internal = ntohs(icmp_packet->identifier);
+            struct NAT_TABLE_ENTRY nat_entry = find_nat_entry_by_external(IPV4_HEADER_PROTOCOL_CONSTANTS::ICMP_PROTOCOL, key_internal);
+
+            if(memcmp(&nat_entry, &void_entry, sizeof(NAT_TABLE_ENTRY)) == 0){
+                // 포트 할당 안되어있으면 드롭
+                if(debug_mode_nat){
+                    printf("[packet_read] can't find %d in ICMP NAT. Dropping packet.\n", key_internal);
+                }
+                return false;
+            }
+
+            icmp_packet->identifier = htons(nat_entry.internal_port);
+            ipv4_packet->destination_ip = nat_entry.ip;
+            update_table_entry_time(&nat_entry);
+
+            if(debug_mode_nat){
+                printf("[packet_read] icmp nat_inbound activated. %d.%d.%d.%d -> %d.%d.%d.%d(%d)\n",
+                        (ntohl(ipv4_packet->source_ip) >> 24) & 0xFF,
+                        (ntohl(ipv4_packet->source_ip) >> 16) & 0xFF,
+                        (ntohl(ipv4_packet->source_ip) >>  8) & 0xFF,
+                        (ntohl(ipv4_packet->source_ip)         ) & 0xFF,
+                        (ntohl(ipv4_packet->destination_ip) >> 24) & 0xFF,
+                        (ntohl(ipv4_packet->destination_ip) >> 16) & 0xFF,
+                        (ntohl(ipv4_packet->destination_ip) >>  8) & 0xFF,
+                        (ntohl(ipv4_packet->destination_ip)      ) & 0xFF,
+                        ntohs(icmp_packet->identifier));
+            }
+
+            icmp_calculate_checksum(icmp_packet, ipv4_packet); // 여기 확인
+            return true;
+        }
+
+        default:{
+            return false;
+            // break;
+        }
+    }
+}
+
+void nat_outbound_handler(struct IPV4_HEADER* ipv4_packet){
+     // lan -> wan
+    uint32_t src_ip = ipv4_packet->source_ip;
+    uint16_t src_port;
+
+    switch(ipv4_packet->protocol){
+        case IPV4_HEADER_PROTOCOL_CONSTANTS::TCP_PROTOCOL:{
+            struct TCP_HEADER* tcp_packet = reinterpret_cast<struct TCP_HEADER*>(
+                (uint8_t*)ipv4_packet + (ipv4_packet->version_ihl & 0x0F) * 4
+            );
+
+            src_port = ntohs(tcp_packet->source_port);
+
+            uint64_t key_internal = (0x8000000000000000ULL) | (uint64_t)src_ip << 16 | src_port;
+            struct NAT_TABLE_ENTRY nat_entry = find_nat_entry_by_internal(key_internal);
+
+            if(memcmp(&nat_entry, &void_entry, sizeof(NAT_TABLE_ENTRY)) == 0){
+                // 포트 할당 안되어있으면 새로 할당 (allocate_tcp_port)
+                nat_entry.ip = src_ip;
+                nat_entry.internal_port = ntohs(tcp_packet->source_port);
+                nat_entry.protocol = IPV4_HEADER_PROTOCOL_CONSTANTS::TCP_PROTOCOL; // TCP
+
+                // 외부 포트 할당
+                uint16_t external_port = allocate_tcp_port();
+                if(external_port == 0){
+                    if(debug_mode_nat){
+                        printf("[packet_read] No available TCP ports for NAT.\n");
+                    }
+                    return; // 포트 부족
+                }
+                nat_entry.external_port = external_port;
+
+                update_nat_table(key_internal, nat_entry);
+            }else{
+            // 포트 할당 되어있으면 그대로 사용
+            // 이미 할당된 포트 있음 -> 시간 갱신
+                update_table_entry_time(&nat_entry);
+            }
+
+            // 할당된 포트로 tcp 패킷 변조
+            tcp_packet->source_port = htons(nat_entry.external_port);
+            ipv4_packet->source_ip = my_ipv4_wan_ip;
+
+            if(debug_mode_nat){
+                printf("[packet_read] tcp nat_outbound activated. %d.%d.%d.%d(%d) -> %d.%d.%d.%d(%d)\n",
+                        (ntohl(ipv4_packet->source_ip) >> 24) & 0xFF,
+                        (ntohl(ipv4_packet->source_ip) >> 16) & 0xFF,
+                        (ntohl(ipv4_packet->source_ip) >>  8) & 0xFF,
+                        (ntohl(ipv4_packet->source_ip)      ) & 0xFF,
+                        ntohs(tcp_packet->source_port),
+                        (ntohl(ipv4_packet->destination_ip) >> 24) & 0xFF,
+                        (ntohl(ipv4_packet->destination_ip) >> 16) & 0xFF,
+                        (ntohl(ipv4_packet->destination_ip) >>  8) & 0xFF,
+                        (ntohl(ipv4_packet->destination_ip)      ) & 0xFF,
+                        ntohs(tcp_packet->destination_port));
+            }
+
+            // checksum 재계산
+            tcp_calculate_checksum(tcp_packet, ipv4_packet);
+            break;
+        }
+
+        case IPV4_HEADER_PROTOCOL_CONSTANTS::UDP_PROTOCOL:{
+            struct UDP_HEADER* udp_packet = reinterpret_cast<struct UDP_HEADER*>(
+                (uint8_t*)ipv4_packet + (ipv4_packet->version_ihl & 0x0F) * 4
+            );
+
+            src_port = ntohs(udp_packet->source_port);
+
+            uint64_t key_internal = (0x8000000000000000ULL) | (uint64_t)src_ip << 16 | src_port;
+            struct NAT_TABLE_ENTRY nat_entry = find_nat_entry_by_internal(key_internal);
+
+            if(memcmp(&nat_entry, &void_entry, sizeof(NAT_TABLE_ENTRY)) == 0){
+                // 포트 할당 안되어있으면 새로 할당 (allocate_tcp_port)
+                nat_entry.ip = ipv4_packet->source_ip;
+                nat_entry.internal_port = ntohs(udp_packet->source_port);
+                nat_entry.protocol = IPV4_HEADER_PROTOCOL_CONSTANTS::UDP_PROTOCOL; // UDP
+
+                // 외부 포트 할당
+                uint16_t external_port = allocate_udp_port();
+                if(external_port == 0){
+                    if(debug_mode_nat){
+                        printf("[packet_read] No available UDP ports for NAT.\n");
+                    }
+                    return; // 포트 부족
+                }
+
+                nat_entry.external_port = external_port;
+            }else{
+            // 포트 할당 되어있으면 그대로 사용
+            // 이미 할당된 포트 있음 -> 시간 갱신
+                update_table_entry_time(&nat_entry);
+            }
+
+            // 할당된 포트로 udp 패킷 변조
+            udp_packet->source_port = htons(nat_entry.external_port);
+            ipv4_packet->source_ip = my_ipv4_wan_ip;
+            
+            update_nat_table(key_internal, nat_entry);
+
+            if(debug_mode_nat){
+                printf("[packet_read] udp nat_outbound activated. %d.%d.%d.%d(%d) -> %d.%d.%d.%d(%d)\n",
+                        (ntohl(ipv4_packet->source_ip) >> 24) & 0xFF,
+                        (ntohl(ipv4_packet->source_ip) >> 16) & 0xFF,
+                        (ntohl(ipv4_packet->source_ip) >>  8) & 0xFF,
+                        (ntohl(ipv4_packet->source_ip)      ) & 0xFF,
+                        ntohs(udp_packet->source_port),
+                        (ntohl(ipv4_packet->destination_ip) >> 24) & 0xFF,
+                        (ntohl(ipv4_packet->destination_ip) >> 16) & 0xFF,
+                        (ntohl(ipv4_packet->destination_ip) >>  8) & 0xFF,
+                        (ntohl(ipv4_packet->destination_ip)      ) & 0xFF,
+                        ntohs(udp_packet->destination_port));
+            }
+
+            // checksum 재계산
+            udp_calculate_checksum(udp_packet, ipv4_packet);
+            break;
+        }
+
+        case IPV4_HEADER_PROTOCOL_CONSTANTS::ICMP_PROTOCOL:{
+            struct ICMP_HEADER* icmp_packet = reinterpret_cast<struct ICMP_HEADER*>(
+                (uint8_t*)ipv4_packet + (ipv4_packet->version_ihl & 0x0F) * 4
+            );
+
+            src_port = ntohs(icmp_packet->identifier);
+
+            uint64_t key_internal = (uint64_t)src_ip << 16 | src_port;
+            struct NAT_TABLE_ENTRY nat_entry = find_nat_entry_by_internal(key_internal);
+
+            if(memcmp(&nat_entry, &void_entry, sizeof(NAT_TABLE_ENTRY)) == 0){
+                // 포트 할당 안되어있으면 새로 할당 (allocate_tcp_port)
+                nat_entry.ip = ipv4_packet->source_ip;
+                nat_entry.internal_port = ntohs(icmp_packet->identifier);
+                nat_entry.protocol = IPV4_HEADER_PROTOCOL_CONSTANTS::ICMP_PROTOCOL; // ICMP
+
+                // 외부 포트 할당
+                uint16_t external_port = allocate_icmp_port();
+                if(external_port == 0){
+                    if(debug_mode_nat){
+                        printf("[packet_read] No available ICMP ports for NAT.\n");
+                    }
+                    return; // 포트 부족
+                }
+
+                nat_entry.external_port = external_port;
+            }else{
+            // 포트 할당 되어있으면 그대로 사용
+            // 이미 할당된 포트 있음 -> 시간 갱신
+                update_table_entry_time(&nat_entry);
+            }
+
+            // 할당된 포트로 udp 패킷 변조
+            icmp_packet->identifier = htons(nat_entry.external_port);
+            ipv4_packet->source_ip = my_ipv4_wan_ip;
+            
+            update_nat_table(key_internal, nat_entry);
+
+            if(debug_mode_nat){
+                printf("[packet_read] udp nat_outbound activated. %d.%d.%d.%d -> %d.%d.%d.%d(%d)\n",
+                        (ntohl(ipv4_packet->source_ip) >> 24) & 0xFF,
+                        (ntohl(ipv4_packet->source_ip) >> 16) & 0xFF,
+                        (ntohl(ipv4_packet->source_ip) >>  8) & 0xFF,
+                        (ntohl(ipv4_packet->source_ip)      ) & 0xFF,
+                        (ntohl(ipv4_packet->destination_ip) >> 24) & 0xFF,
+                        (ntohl(ipv4_packet->destination_ip) >> 16) & 0xFF,
+                        (ntohl(ipv4_packet->destination_ip) >>  8) & 0xFF,
+                        (ntohl(ipv4_packet->destination_ip)      ) & 0xFF,
+                        ntohs(icmp_packet->identifier));
+            }
+
+            // checksum 재계산
+            icmp_calculate_checksum(icmp_packet, ipv4_packet);
+            break;
+        }
+
+        default:{
+            break;
+        }
+    }
+}

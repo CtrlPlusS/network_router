@@ -16,6 +16,7 @@ struct NAT_TABLE_ENTRY {
 
 extern std::unordered_map<uint64_t, NAT_TABLE_ENTRY> lan_to_wan_table;
 extern std::unordered_map<uint32_t, NAT_TABLE_ENTRY> wan_to_lan_table;
+extern struct NAT_TABLE_ENTRY void_entry;
 
 void init_nat_table();
 
@@ -35,5 +36,8 @@ NAT_TABLE_ENTRY find_nat_entry_by_internal(uint64_t internal_port);
 NAT_TABLE_ENTRY find_nat_entry_by_external(uint8_t protocol, uint16_t external_port);
 
 void cleanup_expired_nat_entries();
+
+bool nat_inbound_handler(struct IPV4_HEADER* ipv4_packet);
+void nat_outbound_handler(struct IPV4_HEADER* ipv4_packet);
 
 #endif

@@ -19,6 +19,7 @@
 #include "./route.h"
 #include "./nat.h"
 #include "./firewall.h"
+#include "./dhcp.h"
 
 using namespace std;
 
@@ -50,7 +51,7 @@ void init_router(){
     init_router_info();
 
     // 라우팅 테이블 초기화
-    routing_table_init();
+    init_routing_table();
 
     // MAC 주소 초기화
     init_mac_address();
@@ -60,6 +61,8 @@ void init_router(){
 
     // 방화벽 테이블 초기화
     init_firewall_table();
+
+    init_dhcp_table();
 }
 
 int main(){
@@ -132,15 +135,15 @@ int main(){
         // }
 
         switch(ptype){
-            case ETH_HEADER_CONSTANTS::ETH_P_IP:{
-                uint32_t gateway = ipv4_read_handler(buffer);
+            case ETH_HEADER_CONSTANTS::ETH_P_IPV4:{
+                uint32_t gateway = ipv4_read_handler(sock_raw, buffer, saddr.sll_ifindex);
                 if(gateway == 0){
                     // 목적지가 로컬인 경우 처리 생략
                     break;
                 }
-                // eth_send_handler(sock_raw, buffer, gateway, sock_data, "enxb0386cf1284b");        
+                // eth_send_handler(sock_raw, buffer, gateway, sock_data, "eth1");        
 
-                struct IPV4_HEADER *ipv4 = (struct IPV4_HEADER*)(buffer + sizeof(struct ETH_HEADER));
+                struct IPV4_HEADER* ipv4 = reinterpret_cast<struct IPV4_HEADER*>(buffer + sizeof(struct ETH_HEADER));
                 struct ROUTE_ENTRY route = routing_table_find(ipv4->destination_ip);
                 
                 // 라우팅 테이블에 적힌 올바른 인터페이스로 전송

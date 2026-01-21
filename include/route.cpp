@@ -16,7 +16,7 @@ struct ROUTE_ENTRY default_gateway = {
     .metric = 99
 };
 
-void routing_table_init() {
+void init_routing_table() {
     routing_table.clear();
 
     routing_table.push_back(default_gateway); // 기본 게이트웨이
@@ -31,7 +31,7 @@ void routing_table_init() {
         .destination = inet_addr("10.0.0.0"),
         .netmask = inet_addr("255.255.255.0"),
         .gateway = inet_addr("0.0.0.0"),
-        .interface = "enxb0386cf1284b",
+        .interface = "eth1",
         .metric = 1
     }); // 10.0.0.0/24
     routing_table.push_back({

@@ -70,7 +70,7 @@ void print_packet_info(char* msg, char* buffer) {
         uint16_t oper = ntohs(arp->oper);
         printf("   Operation  : %s (%d)\n", (oper == 1 ? "Request" : (oper == 2 ? "Reply" : "Unknown")), oper);
 
-    } else if (ethertype == ETH_HEADER_CONSTANTS::ETH_P_IP) {
+    } else if (ethertype == ETH_HEADER_CONSTANTS::ETH_P_IPV4) {
         cout << "(IPv4)" << endl;
         struct IPV4_HEADER *ip = reinterpret_cast<struct IPV4_HEADER*>(buffer + sizeof(struct ETH_HEADER));
         

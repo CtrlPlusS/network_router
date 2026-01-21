@@ -64,10 +64,10 @@ void eth_send_handler(int sock_raw, char* buffer, uint32_t next_hop_ip, size_t p
     struct sockaddr_ll socket_address;
     memset(&socket_address, 0, sizeof(socket_address));
     socket_address.sll_family = AF_PACKET;
-    socket_address.sll_protocol = htons(ETH_HEADER_CONSTANTS::ETH_P_IP);
+    socket_address.sll_protocol = htons(ETH_HEADER_CONSTANTS::ETH_P_IPV4);
 
     // 
-    // socket_address.sll_ifindex = if_nametoindex("enxb0386cf1284b");
+    // socket_address.sll_ifindex = if_nametoindex("eth1");
     socket_address.sll_ifindex = if_nametoindex(interface_name);
     socket_address.sll_halen = ETH_ALEN;
     memcpy(socket_address.sll_addr, dest_mac->mac, 6);
@@ -79,14 +79,34 @@ void eth_send_handler(int sock_raw, char* buffer, uint32_t next_hop_ip, size_t p
     if(sent_size < 0){
         print_errno_message("Error in sendto : ");
     } else {
-        //source IP and destination IP for debug message
-        struct IPV4_HEADER *ipv4_packet = reinterpret_cast<struct IPV4_HEADER*>(buffer + sizeof(struct ETH_HEADER));
-        
         if(debug_mode_packet_send){
-            uint32_t src_ip = htonl(ipv4_packet->source_ip);
-            uint32_t dst_ip = htonl(ipv4_packet->destination_ip);
-
             print_packet_info("[packet_send] ", buffer);
+        }
+    }
+}
+
+void dhcp_send_handler(int sock, char* buffer, int packet_len, int if_index){
+    // 소켓 주소 설정
+    struct sockaddr_ll sll;
+    memset(&sll, 0, sizeof(sll));
+
+    sll.sll_family = AF_PACKET;
+    sll.sll_protocol = htons(ETH_HEADER_CONSTANTS::ETH_P_IPV4);
+    sll.sll_ifindex = if_index;
+    sll.sll_halen = 6;
+    
+    // sockaddr의 목적지도 브로드캐스트로 설정
+    memset(sll.sll_addr, 0xFF, 6);
+
+    // 4. 전송
+    ssize_t sent_size = sendto(sock, buffer, packet_len, 0,
+                               (struct sockaddr*)&sll, sizeof(sll));
+
+    if (sent_size < 0) {
+        print_errno_message("Error in send_dhcp_response: ");
+    } else {
+        if(debug_mode_packet_send){
+            printf("[packet_send] Response Sent (%ld bytes) via Interface Index %d\n", sent_size, if_index);
         }
     }
 }
