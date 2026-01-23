@@ -11,29 +11,28 @@
 std::pair<bool, time_t> allocated_ip_table[253];
 
 extern struct MAC_ADDRESS mac_lan;
-
-uint16_t last_ip_num; // 2 ~ 254
+const uint16_t offering_time = 3600;
 
 void init_dhcp_table(){
     memset(allocated_ip_table, 0, sizeof(std::pair<bool, time_t>) * 253);
-    last_ip_num = 0;
 }
 
 uint16_t allocate_ip_num(){
-    for(int i = 0; i < 253; ++i){
-        int idx = (last_ip_num + i) % 253;
-        if(!allocated_ip_table[idx].first){
-            return idx + 2;
+    for(int i = 2; i <= 254; ++i){
+        if(!allocated_ip_table[i - 2].first){
+            allocated_ip_table[i - 2].first = true;
+            allocated_ip_table[i - 2].second = time(NULL) + offering_time;
+            return i;
         }
     }
     return 256;
 }
 
-void cleanup_expired_dhcp_entries(){
+void refresh_dhcp_entries(){
     time_t now = time(NULL);
-    for(int i = 1; i < 255; ++i){
-        if(allocated_ip_table[i].first && allocated_ip_table[i].second > now){
-            allocated_ip_table[i].first = false;
+    for(int i = 2; i <= 254; ++i){
+        if(allocated_ip_table[i - 2].first && allocated_ip_table[i - 2].second > now){
+            allocated_ip_table[i - 2].first = false;
         }
     }
 }
@@ -81,7 +80,7 @@ int dhcp_discover_handler(char* buffer){
     *(uint32_t*)opt = inet_addr("10.0.0.1"); opt += 4;
 
     *opt++ = 51; *opt++ = 4;
-    *(uint32_t*)opt = htonl(3600); opt += 4;   
+    *(uint32_t*)opt = htonl(offering_time); opt += 4;   
 
     // Option 255: End
     *opt++ = 255;
@@ -115,23 +114,51 @@ int dhcp_request_handler(char* buffer){
     struct UDP_HEADER* udp_packet = reinterpret_cast<UDP_HEADER*>((uint8_t*)ipv4_packet + (ipv4_packet->version_ihl & 0x0F) * 4);
     struct DHCP_HEADER* dhcp_packet = reinterpret_cast<DHCP_HEADER*>((uint8_t*)udp_packet + sizeof(struct UDP_HEADER));
 
-    uint8_t* requested_ip = dhcp_packet->options;
-    while(*requested_ip != 50 && *requested_ip != 255){
-        requested_ip++;
-        requested_ip = requested_ip + *(requested_ip);
+    uint8_t requested_ip_last_byte = 0; // 못 찾으면 0
+    
+    if(dhcp_packet->ciaddr != 0){
+        requested_ip_last_byte = dhcp_packet->ciaddr & 0x00'00'00'FF;
+        allocated_ip_table[requested_ip_last_byte - 2].second = time(NULL);
+    }
+    else{
+        uint8_t* option_ptr = dhcp_packet->options;
+        bool option_found = false;
+
+        // 1. 옵션 파싱 (안전한 포인터 연산)
+        while(*option_ptr != 255) { // End Option(255) 만날 때까지
+            switch(*option_ptr){
+                case 50:{
+                    requested_ip_last_byte = *(option_ptr + 2 + 3); 
+                    option_found = true;
+                    break;
+                }
+
+                case 0:{
+                    option_ptr++;
+                    break;
+                }
+
+                default:{
+                    uint8_t len = *(option_ptr + 1);
+                    option_ptr += (2 + len); // 다음 옵션으로 점프
+                    break;
+                }
+            }
+        }
+        if (!option_found || requested_ip_last_byte >= 255 || requested_ip_last_byte <= 1) {
+            requested_ip_last_byte = 2; 
+        }
+    
+        allocated_ip_table[requested_ip_last_byte].first = true;
+        allocated_ip_table[requested_ip_last_byte].second = time(NULL) + offering_time;
     }
 
-    uint8_t requested_ip_num = *requested_ip;
-    allocated_ip_table[requested_ip_num].first = true;
-    allocated_ip_table[requested_ip_num].second = time(NULL) + 3600;
-
-    dhcp_packet->op = 5;
+    dhcp_packet->op = 2;
     dhcp_packet->hops = 0;
     dhcp_packet->secs = 0;
-    dhcp_packet->ciaddr = inet_addr("0.0.0.0");
 
     char ip_num_buffer[20];
-    sprintf(ip_num_buffer, "10.0.0.%d", requested_ip_num);
+    sprintf(ip_num_buffer, "10.0.0.%d", requested_ip_last_byte);
     dhcp_packet->yiaddr = inet_addr(ip_num_buffer);
     dhcp_packet->siaddr = inet_addr("10.0.0.1");
     dhcp_packet->giaddr = inet_addr("0.0.0.0");
@@ -140,7 +167,7 @@ int dhcp_request_handler(char* buffer){
     dhcp_packet->magic_cookie = htonl(0x63825363);
 
     uint8_t* opt = reinterpret_cast<uint8_t*>((uint8_t*)dhcp_packet->options);
-    *opt++ = 53; *opt++ = 1; *opt++ = 2; 
+    *opt++ = 53; *opt++ = 1; *opt++ = 5; 
 
     // Option 1: Subnet Mask (255.255.255.0)
     *opt++ = 1; *opt++ = 4;
@@ -159,7 +186,7 @@ int dhcp_request_handler(char* buffer){
     *(uint32_t*)opt = inet_addr("10.0.0.1"); opt += 4;
 
     *opt++ = 51; *opt++ = 4;
-    *(uint32_t*)opt = htonl(3600); opt += 4;   
+    *(uint32_t*)opt = htonl(offering_time); opt += 4;   
 
     // Option 255: End
     *opt++ = 255;

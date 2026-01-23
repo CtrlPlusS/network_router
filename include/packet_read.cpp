@@ -122,6 +122,13 @@ bool ipv4_packet_drop_check(IPV4_HEADER* ipv4_packet){
         return true;
     }
 
+    // if(ipv4_packet->protocol == IPV4_HEADER_PROTOCOL_CONSTANTS::UDP_PROTOCOL){
+    //     UDP_HEADER* udp_header = reinterpret_cast<UDP_HEADER*>((uint8_t*)ipv4_packet + (ipv4_packet->version_ihl & 0x0F) * 4);
+    //     if (udp_header->destination_port == htons(67) || udp_header->destination_port == htons(68)) {
+    //         return true;
+    //     }
+    // }
+
     uint8_t firewall_check;
     switch(ipv4_packet->protocol){
         case IPV4_HEADER_PROTOCOL_CONSTANTS::ICMP_PROTOCOL:{

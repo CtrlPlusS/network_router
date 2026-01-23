@@ -11,8 +11,8 @@ std::vector<ROUTE_ENTRY> routing_table;
 struct ROUTE_ENTRY default_gateway = {
     .destination = inet_addr("0.0.0.0"),
     .netmask = inet_addr("0.0.0.0"),
-    .gateway = inet_addr("192.168.0.1"),
-    .interface = "wlan0",
+    .gateway = inet_addr("172.16.102.1"),
+    .interface = "eth1",
     .metric = 99
 };
 
@@ -31,14 +31,14 @@ void init_routing_table() {
         .destination = inet_addr("10.0.0.0"),
         .netmask = inet_addr("255.255.255.0"),
         .gateway = inet_addr("0.0.0.0"),
-        .interface = "eth1",
+        .interface = "wlan0",
         .metric = 1
     }); // 10.0.0.0/24
     routing_table.push_back({
         .destination = inet_addr("8.8.8.0"),
         .netmask = inet_addr("255.255.255.0"),
-        .gateway = inet_addr("192.168.0.1"),
-        .interface = "wlan0",
+        .gateway = inet_addr("172.16.102.1"),
+        .interface = "eth1",
         .metric = 10
     }); // 8.8.8.0/24 (외부망 테스트)
 

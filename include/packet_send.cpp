@@ -22,9 +22,9 @@ extern struct MAC_ADDRESS mac_wan;
 void init_mac_address(){
     arp_table.clear();
 
-    arp_table[inet_addr("192.168.0.1")] = {0x90, 0x9f, 0x33, 0xdf, 0x7b, 0x98}; // wlan0 MAC 주소
+    arp_table[inet_addr("172.16.102.1")] = {0x2c, 0xfa, 0xa2, 0xfd, 0x55, 0xb8}; // wlan0 MAC 주소
     arp_table[inet_addr("0.0.0.0")] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff}; // 브로드캐스트 주소
-    arp_table[inet_addr("10.0.0.2")] = {0x00, 0x2b, 0x67, 0xfe, 0x96, 0x4e}; // 노트북 MAC 주소 
+    // arp_table[inet_addr("10.0.0.2")] = {0x00, 0x2b, 0x67, 0xfe, 0x96, 0x4e}; // 노트북 MAC 주소 
 }
 
 /**
@@ -44,7 +44,7 @@ void eth_send_handler(int sock_raw, char* buffer, uint32_t next_hop_ip, size_t p
 
     // 이더넷 헤더 수정
     struct MAC_ADDRESS* src_mac = &mac_lan; // 기본값
-    if(strcmp(interface_name, "wlan0") == 0) {
+    if(strcmp(interface_name, "eth1") == 0) {
         src_mac = &mac_wan;
     }
 
@@ -66,8 +66,6 @@ void eth_send_handler(int sock_raw, char* buffer, uint32_t next_hop_ip, size_t p
     socket_address.sll_family = AF_PACKET;
     socket_address.sll_protocol = htons(ETH_HEADER_CONSTANTS::ETH_P_IPV4);
 
-    // 
-    // socket_address.sll_ifindex = if_nametoindex("eth1");
     socket_address.sll_ifindex = if_nametoindex(interface_name);
     socket_address.sll_halen = ETH_ALEN;
     memcpy(socket_address.sll_addr, dest_mac->mac, 6);

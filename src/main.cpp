@@ -99,6 +99,7 @@ int main(){
         time_t current_time = time(NULL);
         if (current_time - last_cleanup_time >= 1) {
             cleanup_expired_nat_entries();
+            refresh_dhcp_entries();
             last_cleanup_time = current_time;
             if(debug_mode_main){
                 printf("[main] nat clean done\n");
@@ -140,8 +141,7 @@ int main(){
                 if(gateway == 0){
                     // 목적지가 로컬인 경우 처리 생략
                     break;
-                }
-                // eth_send_handler(sock_raw, buffer, gateway, sock_data, "eth1");        
+                }       
 
                 struct IPV4_HEADER* ipv4 = reinterpret_cast<struct IPV4_HEADER*>(buffer + sizeof(struct ETH_HEADER));
                 struct ROUTE_ENTRY route = routing_table_find(ipv4->destination_ip);

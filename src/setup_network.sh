@@ -1,7 +1,7 @@
 #!/bin/bash
 
-LAN_IF="eth1"
-WAN_IF="wlan0"
+LAN_IF="wlan0"
+WAN_IF="eth1"
 
 # 1. 인터페이스 활성화
 ip link set $LAN_IF up
