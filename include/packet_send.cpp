@@ -16,8 +16,11 @@
 extern bool debug_mode_packet_send;
 
 std::map<uint32_t, struct MAC_ADDRESS> arp_table;
-extern struct MAC_ADDRESS mac_lan;
-extern struct MAC_ADDRESS mac_wan;
+extern struct MAC_ADDRESS my_mac_lan;
+extern struct MAC_ADDRESS my_mac_wan;
+
+extern std::string my_interface_lan;
+extern std::string my_interface_wan;
 
 void init_mac_address(){
     arp_table.clear();
@@ -43,9 +46,9 @@ void eth_send_handler(int sock_raw, char* buffer, uint32_t next_hop_ip, size_t p
     struct ETH_HEADER *eth = reinterpret_cast<struct ETH_HEADER*>(buffer);
 
     // 이더넷 헤더 수정
-    struct MAC_ADDRESS* src_mac = &mac_lan; // 기본값
-    if(strcmp(interface_name, "eth1") == 0) {
-        src_mac = &mac_wan;
+    struct MAC_ADDRESS* src_mac = &my_mac_lan; // 기본값
+    if(strcmp(interface_name, my_interface_wan.data()) == 0) {
+        src_mac = &my_mac_wan;
     }
 
     // 선택된 MAC 주소 대입
@@ -53,7 +56,6 @@ void eth_send_handler(int sock_raw, char* buffer, uint32_t next_hop_ip, size_t p
         eth->source_mac[i] = src_mac->mac[i];
     }
 
-    // ARP 테이블에서 목적지 MAC 주소 조회 (여기서는 임시로 브로드캐스트 주소 사용)
     struct MAC_ADDRESS* dest_mac = get_mac_address(next_hop_ip);
 
     for(int i = 0; i < 6; i++){

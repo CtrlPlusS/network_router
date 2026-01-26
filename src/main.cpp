@@ -24,12 +24,12 @@
 using namespace std;
 
 extern std::vector<ROUTE_ENTRY> routing_table;
-extern struct MAC_ADDRESS mac_lan;
-extern struct MAC_ADDRESS mac_wan;
+extern struct MAC_ADDRESS my_mac_lan;
+extern struct MAC_ADDRESS my_mac_wan;
 
 bool debug_mode_main = true;
 bool debug_mode_common = false;
-bool debug_mode_packet_send = false;
+bool debug_mode_packet_send = true;
 bool debug_mode_packet_read = false;
 bool debug_mode_route = false;
 bool debug_mode_router_info = true;
@@ -123,8 +123,8 @@ int main(){
 
         eth = reinterpret_cast<struct ETH_HEADER*>(buffer);
 
-        if(memcmp(eth->source_mac, mac_lan.mac, 6) == 0 
-            || memcmp(eth->source_mac, mac_wan.mac, 6) == 0){
+        if(memcmp(eth->source_mac, my_mac_lan.mac, 6) == 0 
+            || memcmp(eth->source_mac, my_mac_wan.mac, 6) == 0){
             //내부에서 보낸 패킷인 경우
             continue;
         }

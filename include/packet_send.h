@@ -5,8 +5,6 @@
 #include "./packets.h"
 
 extern std::map<uint32_t, struct MAC_ADDRESS> arp_table;
-extern struct MAC_ADDRESS mac_lan;
-extern struct MAC_ADDRESS mac_wan;
 
 void init_mac_address();
 struct MAC_ADDRESS* get_mac_address(uint32_t ip_address);

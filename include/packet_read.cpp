@@ -24,8 +24,8 @@
 
 extern bool debug_mode_packet_read;
 
-extern MAC_ADDRESS mac_lan;
-extern MAC_ADDRESS mac_wan;
+extern MAC_ADDRESS my_mac_lan;
+extern MAC_ADDRESS my_mac_wan;
 
 extern uint32_t my_ipv4_lan_ip;
 extern uint32_t my_ipv4_wan_ip;
@@ -280,11 +280,11 @@ uint32_t arp_read_handler(char* buffer){
 
         if(is_request_for_lan){
             // LAN에서 온 요청이면 -> 내 LAN 정보로 답장
-            memcpy(arp->sha, mac_lan.mac, 6);
+            memcpy(arp->sha, my_mac_lan.mac, 6);
             memcpy(arp->spa, (uint8_t*)&my_ipv4_lan_ip, 4);
         } else {
             // WAN에서 온 요청이면 -> 내 WAN 정보로 답장
-            memcpy(arp->sha, mac_wan.mac, 6);
+            memcpy(arp->sha, my_mac_wan.mac, 6);
             memcpy(arp->spa, (uint8_t*)&my_ipv4_wan_ip, 4);
         }
     }

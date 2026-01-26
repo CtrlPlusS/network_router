@@ -1,7 +1,12 @@
 #!/bin/bash
 
-LAN_IF="wlan0"
-WAN_IF="eth1"
+WAN_IF=$(ip route show default | awk '/default/ {print $5}' | head -n 1)
+LAN_IF=$(ls /sys/class/net | grep ^wl | head -n 1)
+
+if [ -z "$WAN_IF" ]; then WAN_IF="eth0"; fi
+if [ -z "$LAN_IF" ]; then LAN_IF="wlan0"; fi
+
+echo "Auto-detected: WAN=$WAN_IF, LAN=$LAN_IF"
 
 # 1. 인터페이스 활성화
 ip link set $LAN_IF up
