@@ -48,6 +48,10 @@ bool is_lan_ip( uint32_t ip_address){
     return (ip_address & 0xFF000000) == 0x0A000000; // 10.x.x.x 대역
 }
 
+uint64_t make_nat_key(uint32_t ip, uint16_t port, uint8_t protocol) {
+    return ((uint64_t)protocol << 56) | ((uint64_t)ip << 16) | port;
+}
+
 uint16_t allocate_tcp_port(){
     for(int i = 0; i < 20000; ++i){
         int idx = (last_tcp_port_num + i) % 20000;
@@ -139,8 +143,8 @@ NAT_TABLE_ENTRY find_nat_entry_by_external(uint8_t protocol, uint16_t external_p
     return NAT_TABLE_ENTRY{0, 0, 0, 0, 0};
 }
 
-const int TCP_TIMEOUT = 60;
-const int UDP_TIMEOUT = 30;
+const int TCP_TIMEOUT = 300;
+const int UDP_TIMEOUT = 120;
 const int ICMP_TIMEOUT = 60;
 
 void cleanup_expired_nat_entries() {
@@ -170,31 +174,32 @@ void cleanup_expired_nat_entries() {
         
         // timeout 적용
         if (diff > timeout_limit) {
-            uint64_t key_internal = ((uint64_t)entry.ip << 16) | 
-                                    entry.internal_port;
             switch(entry.protocol){
                 case IPV4_HEADER_PROTOCOL_CONSTANTS::TCP_PROTOCOL:{
                     int idx = entry.external_port - 10000;
                     if(idx >= 0 && idx < 20000) is_tcp_port_allocated[idx / 8] &= ~(1 << (idx % 8));
-                    key_internal |= 0x8000000000000000ULL;
+                    uint64_t key_internal = make_nat_key(entry.ip, entry.internal_port, IPV4_HEADER_PROTOCOL_CONSTANTS::TCP_PROTOCOL);
+                    lan_to_wan_table.erase(key_internal);
                     break;
                 }
                 
                 case IPV4_HEADER_PROTOCOL_CONSTANTS::UDP_PROTOCOL:{
                     int idx = entry.external_port - 30000;
                     if(idx >= 0 && idx < 20000) is_udp_port_allocated[idx / 8] &= ~(1 << (idx % 8));
-                    key_internal |= 0x8000000000000000ULL;
+                    uint64_t key_internal = make_nat_key(entry.ip, entry.internal_port, IPV4_HEADER_PROTOCOL_CONSTANTS::UDP_PROTOCOL);
+                    lan_to_wan_table.erase(key_internal);
                     break;
                 }
 
                 case IPV4_HEADER_PROTOCOL_CONSTANTS::ICMP_PROTOCOL:{
                     int idx = entry.external_port - 10000;
                     if(idx >= 0 && idx < 20000) is_icmp_port_allocated[idx / 8] &= ~(1 << (idx % 8));
+                    uint64_t key_internal = make_nat_key(entry.ip, entry.internal_port, IPV4_HEADER_PROTOCOL_CONSTANTS::ICMP_PROTOCOL);
+                    lan_to_wan_table.erase(key_internal);
                     break;
                 }
             }
             
-            lan_to_wan_table.erase(key_internal);
             it = wan_to_lan_table.erase(it);
         } else {
             // 만료 안 됐으면 다음으로
@@ -346,7 +351,7 @@ void nat_outbound_handler(struct IPV4_HEADER* ipv4_packet){
 
             src_port = ntohs(tcp_packet->source_port);
 
-            uint64_t key_internal = (0x8000000000000000ULL) | (uint64_t)src_ip << 16 | src_port;
+            uint64_t key_internal = make_nat_key(src_ip, src_port, IPV4_HEADER_PROTOCOL_CONSTANTS::TCP_PROTOCOL);
             struct NAT_TABLE_ENTRY nat_entry = find_nat_entry_by_internal(key_internal);
 
             if(memcmp(&nat_entry, &void_entry, sizeof(NAT_TABLE_ENTRY)) == 0){
@@ -402,7 +407,7 @@ void nat_outbound_handler(struct IPV4_HEADER* ipv4_packet){
 
             src_port = ntohs(udp_packet->source_port);
 
-            uint64_t key_internal = (0x8000000000000000ULL) | (uint64_t)src_ip << 16 | src_port;
+            uint64_t key_internal = make_nat_key(src_ip, src_port, IPV4_HEADER_PROTOCOL_CONSTANTS::UDP_PROTOCOL);
             struct NAT_TABLE_ENTRY nat_entry = find_nat_entry_by_internal(key_internal);
 
             if(memcmp(&nat_entry, &void_entry, sizeof(NAT_TABLE_ENTRY)) == 0){
@@ -459,7 +464,7 @@ void nat_outbound_handler(struct IPV4_HEADER* ipv4_packet){
 
             src_port = ntohs(icmp_packet->identifier);
 
-            uint64_t key_internal = (uint64_t)src_ip << 16 | src_port;
+            uint64_t key_internal = make_nat_key(src_ip, src_port, IPV4_HEADER_PROTOCOL_CONSTANTS::ICMP_PROTOCOL);
             struct NAT_TABLE_ENTRY nat_entry = find_nat_entry_by_internal(key_internal);
 
             if(memcmp(&nat_entry, &void_entry, sizeof(NAT_TABLE_ENTRY)) == 0){

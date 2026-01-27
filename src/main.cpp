@@ -27,12 +27,12 @@ extern std::vector<ROUTE_ENTRY> routing_table;
 extern struct MAC_ADDRESS my_mac_lan;
 extern struct MAC_ADDRESS my_mac_wan;
 
-bool debug_mode_main = true;
+bool debug_mode_main = false;
 bool debug_mode_common = false;
-bool debug_mode_packet_send = true;
+bool debug_mode_packet_send = false;
 bool debug_mode_packet_read = false;
 bool debug_mode_route = false;
-bool debug_mode_router_info = true;
+bool debug_mode_router_info = false;
 bool debug_mode_nat = false;
 bool debug_mode_firewall = false;
 
@@ -86,7 +86,6 @@ int main(){
 
     // 패킷 수신
     char buffer[65536];
-    char* interface_name;
     struct ETH_HEADER *eth = nullptr;
     struct sockaddr_ll saddr;
     socklen_t saddr_len;
@@ -101,9 +100,9 @@ int main(){
             cleanup_expired_nat_entries();
             refresh_dhcp_entries();
             last_cleanup_time = current_time;
-            if(debug_mode_main){
-                printf("[main] nat clean done\n");
-            }
+            // if(debug_mode_main){
+            //     printf("[main] nat clean done\n");
+            // }
         }
 
         saddr_len = sizeof(saddr);
@@ -132,12 +131,15 @@ int main(){
         uint16_t ptype = ntohs(eth->ethertype);
 
         // if(debug_mode_main){
-        //     printf("[main] Packet received on interface index %d, Ethertype: 0x%04X\n", saddr.sll_ifindex, ptype);
+        //     if(memcmp(eth->destination_mac, my_mac_lan.mac, 6) == 0 
+        //     || memcmp(eth->destination_mac, my_mac_wan.mac, 6) == 0){
+        //         printf("[main] Packet received on interface index %d, Ethertype: 0x%04X\n", saddr.sll_ifindex, ptype);
+        //     }
         // }
 
         switch(ptype){
             case ETH_HEADER_CONSTANTS::ETH_P_IPV4:{
-                uint32_t gateway = ipv4_read_handler(sock_raw, buffer, saddr.sll_ifindex);
+                uint32_t gateway = ipv4_read_handler(buffer, sock_raw, saddr.sll_ifindex);
                 if(gateway == 0){
                     // 목적지가 로컬인 경우 처리 생략
                     break;
@@ -151,7 +153,7 @@ int main(){
                 break;
             }
             case ETH_HEADER_CONSTANTS::ETH_P_ARP:{
-                uint32_t gateway = arp_read_handler(buffer);
+                uint32_t gateway = arp_read_handler(buffer, sock_raw, saddr.sll_ifindex);
                 if(gateway == 0){
                     // 목적지가 로컬인 경우 처리 생략
                     break;

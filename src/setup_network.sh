@@ -31,5 +31,16 @@ sudo iptables -F
 sudo iptables -A OUTPUT -p tcp --sport 10000:65535 --tcp-flags RST RST -j DROP
 echo "iptable setup complete"
 
+echo "Applying NIC Offload settings (Fixing 'Message too long' error)..."
+
+if ! command -v ethtool &> /dev/null; then
+    echo "ethtool not found. Installing..."
+    sudo apt-get update && sudo apt-get install ethtool -y
+fi
+sudo ethtool -K eth1 gro off gso off tso off lro off ufo off
+sudo ethtool -K wlan0 gro off gso off tso off lro off ufo off
+
+echo "Network Setup Completed Successfully!"
+
 echo "C++ NAT Testing Environment Ready!"
 echo "Kernel IP Forwarding: OFF (User program will handle routing)"

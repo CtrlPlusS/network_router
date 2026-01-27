@@ -3,14 +3,19 @@
 #include <time.h>
 #include <cstring>
 #include <cstdio>
+#include <map>
 
+#include "./packet_send.h"
 #include "./packets.h"
 #include "./router_info.h"
-#include "common.h"
+#include "./common.h"
 
 std::pair<bool, time_t> allocated_ip_table[253];
 
 extern struct MAC_ADDRESS my_mac_lan;
+
+extern std::map<uint32_t, struct MAC_ADDRESS> arp_table;
+
 const uint16_t offering_time = 3600;
 
 void init_dhcp_table(){
@@ -208,6 +213,8 @@ int dhcp_request_handler(char* buffer){
     else{
         memset(eth_packet->destination_mac, 0xFF, 6);
     }
+
+    arp_table[dhcp_packet->yiaddr] = *(MAC_ADDRESS*)eth_packet->source_mac;
     memcpy((MAC_ADDRESS*)eth_packet->source_mac, &my_mac_lan, 6);
     eth_packet->ethertype = htons(ETH_HEADER_CONSTANTS::ETH_P_IPV4);
 

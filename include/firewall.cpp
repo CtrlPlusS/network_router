@@ -31,10 +31,10 @@ void init_firewall_table(){
 
     create_firewall_entry({
         .source_ip = 0,
-        .destination_ip = inet_addr("142.250.71.238"),
-        .protocol = IPV4_HEADER_PROTOCOL_CONSTANTS::TCP_PROTOCOL,
+        .destination_ip = 0,
+        .protocol = 0,
         .source_port = 0,
-        .destination_port = htons(80),
+        .destination_port = 0,
         .action = FIREWALL_ACTION_CONSTANTS::ACCEPT
     });
 }

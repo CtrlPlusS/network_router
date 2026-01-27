@@ -30,6 +30,8 @@ extern MAC_ADDRESS my_mac_wan;
 extern uint32_t my_ipv4_lan_ip;
 extern uint32_t my_ipv4_wan_ip;
 
+extern std::map<uint32_t, struct MAC_ADDRESS> arp_table;
+extern std::map<uint32_t, std::queue<std::vector<char>>> pending_packets;
 
 void my_packet_icmp_handler(struct IPV4_HEADER* ipv4_packet){
     struct ICMP_HEADER* icmp_packet = reinterpret_cast<struct ICMP_HEADER*>(
@@ -175,28 +177,28 @@ bool ipv4_packet_drop_check(IPV4_HEADER* ipv4_packet){
     return false;
 }
 
-uint32_t ipv4_read_handler(int sock, char* buffer, int if_index){
+uint32_t ipv4_read_handler(char* buffer, int sock, int if_index){
     struct IPV4_HEADER *ipv4_packet = reinterpret_cast<struct IPV4_HEADER*>(buffer + sizeof(struct ETH_HEADER));
 
     if(ipv4_packet_drop_check(ipv4_packet))
         return 0;
 
-    if(debug_mode_packet_read){
-        printf("[packet_read] packet read! %d.%d.%d.%d(%s) -> %d.%d.%d.%d(%s) (Len: %d, protocol: %d)\n", 
-            (htonl(ipv4_packet->source_ip) >> 24) & 0xFF,
-            (htonl(ipv4_packet->source_ip) >> 16) & 0xFF,
-            (htonl(ipv4_packet->source_ip) >> 8) & 0xFF,
-            (htonl(ipv4_packet->source_ip)) & 0xFF,
-            is_lan_ip(ntohl(ipv4_packet->source_ip)) ? "lan" : "wan",
-            (htonl(ipv4_packet->destination_ip) >> 24) & 0xFF,
-            (htonl(ipv4_packet->destination_ip) >> 16) & 0xFF,
-            (htonl(ipv4_packet->destination_ip) >> 8) & 0xFF,
-            (htonl(ipv4_packet->destination_ip)) & 0xFF,
-            is_lan_ip(ntohl(ipv4_packet->destination_ip)) ? "lan" : "wan",
-            ntohs(ipv4_packet->total_length),
-            ipv4_packet->protocol
-        );
-    }
+    // if(debug_mode_packet_read){
+    //     printf("[packet_read] packet read! %d.%d.%d.%d(%s) -> %d.%d.%d.%d(%s) (Len: %d, protocol: %d)\n", 
+    //         (htonl(ipv4_packet->source_ip) >> 24) & 0xFF,
+    //         (htonl(ipv4_packet->source_ip) >> 16) & 0xFF,
+    //         (htonl(ipv4_packet->source_ip) >> 8) & 0xFF,
+    //         (htonl(ipv4_packet->source_ip)) & 0xFF,
+    //         is_lan_ip(ntohl(ipv4_packet->source_ip)) ? "lan" : "wan",
+    //         (htonl(ipv4_packet->destination_ip) >> 24) & 0xFF,
+    //         (htonl(ipv4_packet->destination_ip) >> 16) & 0xFF,
+    //         (htonl(ipv4_packet->destination_ip) >> 8) & 0xFF,
+    //         (htonl(ipv4_packet->destination_ip)) & 0xFF,
+    //         is_lan_ip(ntohl(ipv4_packet->destination_ip)) ? "lan" : "wan",
+    //         ntohs(ipv4_packet->total_length),
+    //         ipv4_packet->protocol
+    //     );
+    // }
 
     // udp이고 destination_port가 67인것들은 dhcp처리
     if(ipv4_packet->protocol == IPV4_HEADER_PROTOCOL_CONSTANTS::UDP_PROTOCOL){
@@ -255,39 +257,62 @@ uint32_t ipv4_read_handler(int sock, char* buffer, int if_index){
     return route.gateway;
 }
 
-uint32_t arp_read_handler(char* buffer){
+uint32_t arp_read_handler(char* buffer, int sock, int if_index){
     struct ARP_HEADER *arp = reinterpret_cast<struct ARP_HEADER*>(buffer + sizeof(struct ETH_HEADER));
     uint32_t dest_ip = 0;
 
-    // if(debug_mode_packet_read){
-    //     printf("[packet_read] [arp] : %02x:%02x:%02x:%02x:%02x:%02x -> %02x:%02x:%02x:%02x:%02x:%02x\n",
-    //     arp->sha[0], arp->sha[1], arp->sha[2], arp->sha[3], arp->sha[4], arp->sha[5],
-    //     arp->tha[0], arp->tha[1], arp->tha[2], arp->tha[3], arp->tha[4], arp->tha[5]);
-    // }
+    if(debug_mode_packet_read){
+        printf("[packet_read] [arp] : %02x:%02x:%02x:%02x:%02x:%02x -> %02x:%02x:%02x:%02x:%02x:%02x\n",
+        arp->sha[0], arp->sha[1], arp->sha[2], arp->sha[3], arp->sha[4], arp->sha[5],
+        arp->tha[0], arp->tha[1], arp->tha[2], arp->tha[3], arp->tha[4], arp->tha[5]);
+    }
 
     bool is_request_for_lan = (memcmp(arp->tpa, (uint8_t*)&my_ipv4_lan_ip, 4) == 0);
 
-    if(arp->oper == htons(1) &&
-            (memcmp(arp->tpa, (uint8_t*)&my_ipv4_lan_ip, 4) == 0 
+    switch(ntohs(arp->oper)){
+        case 1:{ // request
+            if((memcmp(arp->tpa, (uint8_t*)&my_ipv4_lan_ip, 4) == 0 
             || memcmp(arp->tpa, (uint8_t*)&my_ipv4_wan_ip, 4) == 0)){
-        // ARP 요청인 경우 (내 IP로 온 경우)
-        
-        dest_ip = *(uint32_t*)arp->spa; // 요청한 쪽의 IP 주소
-        arp->oper = htons(2); // 응답으로 변경
+                // ARP 요청인 경우 (내 IP로 온 경우)
+                
+                dest_ip = *(uint32_t*)arp->spa; // 요청한 쪽의 IP 주소
+                arp->oper = htons(2); // 응답으로 변경
 
-        memcpy(arp->tha, arp->sha, 6); // 대상 MAC 주소에 송신자 MAC 주소 복사
-        memcpy(arp->tpa, arp->spa, 4); // 대상 IP 주소
+                memcpy(arp->tha, arp->sha, 6); // 대상 MAC 주소에 송신자 MAC 주소 복사
+                memcpy(arp->tpa, arp->spa, 4); // 대상 IP 주소
 
-        if(is_request_for_lan){
-            // LAN에서 온 요청이면 -> 내 LAN 정보로 답장
-            memcpy(arp->sha, my_mac_lan.mac, 6);
-            memcpy(arp->spa, (uint8_t*)&my_ipv4_lan_ip, 4);
-        } else {
-            // WAN에서 온 요청이면 -> 내 WAN 정보로 답장
-            memcpy(arp->sha, my_mac_wan.mac, 6);
-            memcpy(arp->spa, (uint8_t*)&my_ipv4_wan_ip, 4);
+                if(is_request_for_lan){
+                    // LAN에서 온 요청이면 -> 내 LAN 정보로 답장
+                    memcpy(arp->sha, my_mac_lan.mac, 6);
+                    memcpy(arp->spa, (uint8_t*)&my_ipv4_lan_ip, 4);
+                } else {
+                    // WAN에서 온 요청이면 -> 내 WAN 정보로 답장
+                    memcpy(arp->sha, my_mac_wan.mac, 6);
+                    memcpy(arp->spa, (uint8_t*)&my_ipv4_wan_ip, 4);
+                }
+            }
+            else{
+                // 내 요청 아닌데 들어온거는 일단 arp테이블에 저장
+                arp_table[*(uint32_t*)arp->spa] = *(struct MAC_ADDRESS*)arp->sha;
+            }
+            break;
+        }
+        case 2:{ // reply
+            arp_table[*(uint32_t*)arp->spa] = *(struct MAC_ADDRESS*)arp->sha;
+            // arp_table[*(uint32_t*)arp->tpa] = *(struct MAC_ADDRESS*)arp->tha;
+
+            auto it = pending_packets.find(*(uint32_t*)arp->spa);
+            if(it != pending_packets.end()){
+                pending_packet_send_handler(it->second, sock, *(uint32_t*)arp->spa, if_index);
+            }
+            break;
+        }
+
+        default:{
+            arp_table[*(uint32_t*)arp->spa] = *(struct MAC_ADDRESS*)arp->sha;
         }
     }
+
  
     return dest_ip;
 }
