@@ -10,23 +10,16 @@
 #include "./router_info.h"
 #include "./common.h"
 
-std::pair<bool, time_t> allocated_ip_table[253];
-
-extern struct MAC_ADDRESS my_mac_lan;
-
-extern std::map<uint32_t, struct MAC_ADDRESS> arp_table;
-
-const uint16_t offering_time = 3600;
-
 void init_dhcp_table(){
-    memset(allocated_ip_table, 0, sizeof(std::pair<bool, time_t>) * 253);
+    memset(router_info::instance().allocated_dhcp_ip_table, 0, sizeof(std::pair<bool, time_t>) * 253);
 }
 
 uint16_t allocate_ip_num(){
+    auto& info = router_info::instance();
     for(int i = 2; i <= 254; ++i){
-        if(!allocated_ip_table[i - 2].first){
-            allocated_ip_table[i - 2].first = true;
-            allocated_ip_table[i - 2].second = time(NULL) + offering_time;
+        if(!info.allocated_dhcp_ip_table[i - 2].first){
+            info.allocated_dhcp_ip_table[i - 2].first = true;
+            info.allocated_dhcp_ip_table[i - 2].second = time(NULL) + info.dhcp_offering_time;
             return i;
         }
     }
@@ -34,15 +27,18 @@ uint16_t allocate_ip_num(){
 }
 
 void refresh_dhcp_entries(){
+    auto& info = router_info::instance();
     time_t now = time(NULL);
     for(int i = 2; i <= 254; ++i){
-        if(allocated_ip_table[i - 2].first && allocated_ip_table[i - 2].second > now){
-            allocated_ip_table[i - 2].first = false;
+        if(info.allocated_dhcp_ip_table[i - 2].first && info.allocated_dhcp_ip_table[i - 2].second > now){
+            info.allocated_dhcp_ip_table[i - 2].first = false;
         }
     }
 }
 
 int dhcp_discover_handler(char* buffer){
+    auto& info = router_info::instance();
+
     struct ETH_HEADER* eth_packet = reinterpret_cast<ETH_HEADER*>((uint8_t*)buffer);
     struct IPV4_HEADER* ipv4_packet = reinterpret_cast<IPV4_HEADER*>((uint8_t*)buffer + sizeof(struct ETH_HEADER));
     struct UDP_HEADER* udp_packet = reinterpret_cast<UDP_HEADER*>((uint8_t*)ipv4_packet + (ipv4_packet->version_ihl & 0x0F) * 4);
@@ -85,7 +81,7 @@ int dhcp_discover_handler(char* buffer){
     *(uint32_t*)opt = inet_addr("10.0.0.1"); opt += 4;
 
     *opt++ = 51; *opt++ = 4;
-    *(uint32_t*)opt = htonl(offering_time); opt += 4;   
+    *(uint32_t*)opt = htonl(info.dhcp_offering_time); opt += 4;   
 
     // Option 255: End
     *opt++ = 255;
@@ -106,7 +102,7 @@ int dhcp_discover_handler(char* buffer){
     ipv4_packet->destination_ip = inet_addr("255.255.255.255");
     ipv4_packet->header_checksum = calculate_checksum((uint16_t*)ipv4_packet, 20);
 
-    memcpy((MAC_ADDRESS*)eth_packet->source_mac, &my_mac_lan, 6);
+    memcpy((MAC_ADDRESS*)eth_packet->source_mac, &info.my_mac_lan, 6);
     memset(eth_packet->destination_mac, 0xFF, 6);
     eth_packet->ethertype = htons(ETH_HEADER_CONSTANTS::ETH_P_IPV4);
 
@@ -114,6 +110,8 @@ int dhcp_discover_handler(char* buffer){
 }
 
 int dhcp_request_handler(char* buffer){
+    auto& info = router_info::instance();
+
     struct ETH_HEADER* eth_packet = reinterpret_cast<ETH_HEADER*>((uint8_t*)buffer);
     struct IPV4_HEADER* ipv4_packet = reinterpret_cast<IPV4_HEADER*>((uint8_t*)buffer + sizeof(struct ETH_HEADER));
     struct UDP_HEADER* udp_packet = reinterpret_cast<UDP_HEADER*>((uint8_t*)ipv4_packet + (ipv4_packet->version_ihl & 0x0F) * 4);
@@ -149,8 +147,8 @@ int dhcp_request_handler(char* buffer){
         requested_ip_last_byte = 2;
     }
 
-    allocated_ip_table[requested_ip_last_byte - 2].first = true;
-    allocated_ip_table[requested_ip_last_byte - 2].second = time(NULL) + offering_time;
+    info.allocated_dhcp_ip_table[requested_ip_last_byte - 2].first = true;
+    info.allocated_dhcp_ip_table[requested_ip_last_byte - 2].second = time(NULL) + info.dhcp_offering_time;
 
     dhcp_packet->op = 2;
     dhcp_packet->hops = 0;
@@ -181,7 +179,7 @@ int dhcp_request_handler(char* buffer){
     *(uint32_t*)opt = inet_addr("10.0.0.1"); opt += 4;
 
     *opt++ = 51; *opt++ = 4;
-    *(uint32_t*)opt = htonl(offering_time); opt += 4;   
+    *(uint32_t*)opt = htonl(info.dhcp_offering_time); opt += 4;   
 
     // Option 255: End
     *opt++ = 255;
@@ -214,8 +212,8 @@ int dhcp_request_handler(char* buffer){
         memset(eth_packet->destination_mac, 0xFF, 6);
     }
 
-    arp_table[dhcp_packet->yiaddr] = *(MAC_ADDRESS*)eth_packet->source_mac;
-    memcpy((MAC_ADDRESS*)eth_packet->source_mac, &my_mac_lan, 6);
+    info.arp_table[dhcp_packet->yiaddr] = *(MAC_ADDRESS*)eth_packet->source_mac;
+    memcpy((MAC_ADDRESS*)eth_packet->source_mac, &info.my_mac_lan, 6);
     eth_packet->ethertype = htons(ETH_HEADER_CONSTANTS::ETH_P_IPV4);
 
     return (uint8_t*)opt - (uint8_t*)buffer;

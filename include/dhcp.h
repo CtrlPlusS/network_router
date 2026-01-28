@@ -3,8 +3,6 @@
 
 #include <cstdint>
 
-extern uint16_t last_ip_num;;
-
 void init_dhcp_table();
 uint16_t allocate_ip_num();
 void refresh_dhcp_entries();

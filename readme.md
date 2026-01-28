@@ -62,3 +62,11 @@ cmake -B build -S .
 
 # 2. 프로젝트 빌드
 cmake --build build
+```
+
+## 라이선스 (License)
+
+이 프로젝트는 **MIT License**에 따라 배포됩니다.
+
+이 소프트웨어는 다음 오픈 소스 라이브러리를 포함하거나 사용하고 있습니다:
+* **[nlohmann/json](https://github.com/nlohmann/json)**: MIT License (Copyright (c) 2013-2022 Niels Lohmann)

@@ -8,8 +8,6 @@
 #include "./common.h"
 #include "./packets.h"
 
-extern bool debug_mode_common;
-
 using namespace std;
 
 //jsdoc형식으로

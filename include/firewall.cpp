@@ -4,12 +4,8 @@
 #include "./firewall.h"
 #include "packets.h"
 
-std::vector<FIREWALL_TABLE_ENTRY> firewall_table;
-
-extern bool debug_mode_firewall;
-
 void init_firewall_table(){
-    firewall_table.clear();
+    router_info::instance().firewall_table.clear();
 
     // create_firewall_entry({
     //     .source_ip = inet_addr("10.0.0.2"),
@@ -44,12 +40,6 @@ bool check_entry (FIREWALL_TABLE_ENTRY* condition, FIREWALL_TABLE_ENTRY* entry){
         return false;
     if(condition->destination_ip != 0 && condition->destination_ip != entry->destination_ip)
         return false;
-
-    if(debug_mode_firewall){
-        printf("[firewall] cond port %d->%d (%d) entry port %d->%d (%d)\n", 
-                condition->source_port, condition->destination_port, condition->protocol,
-                entry->source_port, entry->destination_port, entry->protocol);
-    }
     if(condition->source_port != 0 && condition->source_port != entry->source_port)
         return false;
     if(condition->destination_port != 0 && condition->destination_port != entry->destination_port)
@@ -61,39 +51,21 @@ bool check_entry (FIREWALL_TABLE_ENTRY* condition, FIREWALL_TABLE_ENTRY* entry){
 }
 
 void create_firewall_entry(FIREWALL_TABLE_ENTRY entry){
-    firewall_table.push_back(entry);
+    router_info::instance().firewall_table.push_back(entry);
 }
 
 // 첫번째로 조건에 일치하는 값 찾음
 uint8_t find_firewall_entry(FIREWALL_TABLE_ENTRY entry){
-    auto it = firewall_table.begin();
+    auto& info = router_info::instance();
+    auto it = info.firewall_table.begin();
 
-    while(it != firewall_table.end()){
+    while(it != info.firewall_table.end()){
         if(check_entry(&(*it), &entry)){
-            if(debug_mode_firewall){
-                printf("[firewall] firewall entry checked and found %d.%d.%d.%d -> %d.%d.%d.%d (%s) \n",
-                        (ntohl(entry.source_ip) >> 24) & 0xFF,
-                        (ntohl(entry.source_ip) >> 16) & 0xFF,
-                        (ntohl(entry.source_ip) >>  8) & 0xFF,
-                        (ntohl(entry.source_ip)      ) & 0xFF,
-
-                        (ntohl(entry.destination_ip) >> 24) & 0xFF,
-                        (ntohl(entry.destination_ip) >> 16) & 0xFF,
-                        (ntohl(entry.destination_ip) >>  8) & 0xFF,
-                        (ntohl(entry.destination_ip)      ) & 0xFF,
-
-                        ((*it).action == 0) ? "ACCEPT" : "REJECT"
-                    );
-            }
             return (*it).action;
         }
-
         ++it;
     }
 
-    // if(debug_mode_firewall){
-    //     printf("[firewall] firewall entry checked and not found\n");
-    // }
     return 0;
 }
 

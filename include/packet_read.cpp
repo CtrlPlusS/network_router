@@ -16,22 +16,11 @@
 #include "./common.h"
 #include "./packets.h"
 #include "./router_info.h"
-#include "./packet_read.h"
+// #include "./packet_read.h"
 #include "./route.h"
 #include "./firewall.h"
 #include "./dhcp.h"
 #include "./packet_send.h"
-
-extern bool debug_mode_packet_read;
-
-extern MAC_ADDRESS my_mac_lan;
-extern MAC_ADDRESS my_mac_wan;
-
-extern uint32_t my_ipv4_lan_ip;
-extern uint32_t my_ipv4_wan_ip;
-
-extern std::map<uint32_t, struct MAC_ADDRESS> arp_table;
-extern std::map<uint32_t, std::queue<std::vector<char>>> pending_packets;
 
 void my_packet_icmp_handler(struct IPV4_HEADER* ipv4_packet){
     struct ICMP_HEADER* icmp_packet = reinterpret_cast<struct ICMP_HEADER*>(
@@ -42,10 +31,6 @@ void my_packet_icmp_handler(struct IPV4_HEADER* ipv4_packet){
         icmp_packet->type = 0; // 응답으로 변경
 
         icmp_calculate_checksum(icmp_packet, ipv4_packet);
-
-        if(debug_mode_packet_read){
-            printf("[packet_read] ICMP packet received and Echo Request processed.\n");
-        }
     }
 }
 
@@ -90,6 +75,7 @@ void my_packet_handler(struct IPV4_HEADER* ipv4_packet){
 }
 
 bool ipv4_packet_drop_check(IPV4_HEADER* ipv4_packet){
+    auto& info = router_info::instance();
     // 루프백 패킷 드롭
     if((ntohl(ipv4_packet->destination_ip) >> 24) == 127)
         return true;
@@ -98,7 +84,7 @@ bool ipv4_packet_drop_check(IPV4_HEADER* ipv4_packet){
     if((ntohl(ipv4_packet->destination_ip) & 0xF0000000) == 0xE0000000)
         return true;
 
-    if(ipv4_packet->source_ip == my_ipv4_wan_ip)
+    if(ipv4_packet->source_ip == info.my_ipv4_wan_ip)
         return true;
 
     if(ipv4_packet->source_ip == ipv4_packet->destination_ip)
@@ -178,6 +164,7 @@ bool ipv4_packet_drop_check(IPV4_HEADER* ipv4_packet){
 }
 
 uint32_t ipv4_read_handler(char* buffer, int sock, int if_index){
+    auto& info = router_info::instance();
     struct IPV4_HEADER *ipv4_packet = reinterpret_cast<struct IPV4_HEADER*>(buffer + sizeof(struct ETH_HEADER));
 
     if(ipv4_packet_drop_check(ipv4_packet))
@@ -214,7 +201,7 @@ uint32_t ipv4_read_handler(char* buffer, int sock, int if_index){
     }
 
     bool from_lan = is_lan_ip(ntohl(ipv4_packet->source_ip));
-    bool to_me = (ipv4_packet->destination_ip == my_ipv4_lan_ip || ipv4_packet->destination_ip == my_ipv4_wan_ip);
+    bool to_me = (ipv4_packet->destination_ip == info.my_ipv4_lan_ip || ipv4_packet->destination_ip == info.my_ipv4_wan_ip);
 
     // [3] NAT 및 라우팅 판단 (가장 중요한 분기점)
     if (from_lan && !is_lan_ip(ntohl(ipv4_packet->destination_ip))) {
@@ -259,20 +246,15 @@ uint32_t ipv4_read_handler(char* buffer, int sock, int if_index){
 
 uint32_t arp_read_handler(char* buffer, int sock, int if_index){
     struct ARP_HEADER *arp = reinterpret_cast<struct ARP_HEADER*>(buffer + sizeof(struct ETH_HEADER));
+    auto& info = router_info::instance();
     uint32_t dest_ip = 0;
 
-    if(debug_mode_packet_read){
-        printf("[packet_read] [arp] : %02x:%02x:%02x:%02x:%02x:%02x -> %02x:%02x:%02x:%02x:%02x:%02x\n",
-        arp->sha[0], arp->sha[1], arp->sha[2], arp->sha[3], arp->sha[4], arp->sha[5],
-        arp->tha[0], arp->tha[1], arp->tha[2], arp->tha[3], arp->tha[4], arp->tha[5]);
-    }
-
-    bool is_request_for_lan = (memcmp(arp->tpa, (uint8_t*)&my_ipv4_lan_ip, 4) == 0);
+    bool is_request_for_lan = (memcmp(arp->tpa, (uint8_t*)&info.my_ipv4_lan_ip, 4) == 0);
 
     switch(ntohs(arp->oper)){
         case 1:{ // request
-            if((memcmp(arp->tpa, (uint8_t*)&my_ipv4_lan_ip, 4) == 0 
-            || memcmp(arp->tpa, (uint8_t*)&my_ipv4_wan_ip, 4) == 0)){
+            if((memcmp(arp->tpa, (uint8_t*)&info.my_ipv4_lan_ip, 4) == 0 
+            || memcmp(arp->tpa, (uint8_t*)&info.my_ipv4_wan_ip, 4) == 0)){
                 // ARP 요청인 경우 (내 IP로 온 경우)
                 
                 dest_ip = *(uint32_t*)arp->spa; // 요청한 쪽의 IP 주소
@@ -283,33 +265,33 @@ uint32_t arp_read_handler(char* buffer, int sock, int if_index){
 
                 if(is_request_for_lan){
                     // LAN에서 온 요청이면 -> 내 LAN 정보로 답장
-                    memcpy(arp->sha, my_mac_lan.mac, 6);
-                    memcpy(arp->spa, (uint8_t*)&my_ipv4_lan_ip, 4);
+                    memcpy(arp->sha, info.my_mac_lan.mac, 6);
+                    memcpy(arp->spa, (uint8_t*)&info.my_ipv4_lan_ip, 4);
                 } else {
                     // WAN에서 온 요청이면 -> 내 WAN 정보로 답장
-                    memcpy(arp->sha, my_mac_wan.mac, 6);
-                    memcpy(arp->spa, (uint8_t*)&my_ipv4_wan_ip, 4);
+                    memcpy(arp->sha, info.my_mac_wan.mac, 6);
+                    memcpy(arp->spa, (uint8_t*)&info.my_ipv4_wan_ip, 4);
                 }
             }
             else{
                 // 내 요청 아닌데 들어온거는 일단 arp테이블에 저장
-                arp_table[*(uint32_t*)arp->spa] = *(struct MAC_ADDRESS*)arp->sha;
+                info.arp_table[*(uint32_t*)arp->spa] = *(struct MAC_ADDRESS*)arp->sha;
             }
             break;
         }
         case 2:{ // reply
-            arp_table[*(uint32_t*)arp->spa] = *(struct MAC_ADDRESS*)arp->sha;
+            info.arp_table[*(uint32_t*)arp->spa] = *(struct MAC_ADDRESS*)arp->sha;
             // arp_table[*(uint32_t*)arp->tpa] = *(struct MAC_ADDRESS*)arp->tha;
 
-            auto it = pending_packets.find(*(uint32_t*)arp->spa);
-            if(it != pending_packets.end()){
+            auto it = info.pending_packets.find(*(uint32_t*)arp->spa);
+            if(it != info.pending_packets.end()){
                 pending_packet_send_handler(it->second, sock, *(uint32_t*)arp->spa, if_index);
             }
             break;
         }
 
         default:{
-            arp_table[*(uint32_t*)arp->spa] = *(struct MAC_ADDRESS*)arp->sha;
+            info.arp_table[*(uint32_t*)arp->spa] = *(struct MAC_ADDRESS*)arp->sha;
         }
     }
 

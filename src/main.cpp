@@ -21,34 +21,11 @@
 #include "./firewall.h"
 #include "./dhcp.h"
 
-using namespace std;
-
-extern std::vector<ROUTE_ENTRY> routing_table;
-extern struct MAC_ADDRESS my_mac_lan;
-extern struct MAC_ADDRESS my_mac_wan;
-
-bool debug_mode_main = false;
-bool debug_mode_common = false;
-bool debug_mode_packet_send = false;
-bool debug_mode_packet_read = false;
-bool debug_mode_route = false;
-bool debug_mode_router_info = false;
-bool debug_mode_nat = false;
-bool debug_mode_firewall = false;
-
 void init_router(){
-    printf("===== [debug mode] =====\n");
-    printf("debug_mode_main: %s\n", debug_mode_main ? "true" : "false");
-    printf("debug_mode_common: %s\n", debug_mode_common ? "true" : "false");
-    printf("debug_mode_packet_send: %s\n", debug_mode_packet_send ? "true" : "false");
-    printf("debug_mode_packet_read: %s\n", debug_mode_packet_read ? "true" : "false");
-    printf("debug_mode_route: %s\n", debug_mode_route ? "true" : "false");
-    printf("debug_mode_router_info: %s\n", debug_mode_router_info ? "true" : "false");
-    printf("debug_mode_nat: %s\n", debug_mode_nat ? "true" : "false");
-    printf("debug_mode_firewall: %s\n", debug_mode_firewall ? "true" : "false");
+    auto& info = router_info::instance();
 
     // 라우터 정보 초기화
-    init_router_info();
+    info.init_router_info();
 
     // 라우팅 테이블 초기화
     init_routing_table();
@@ -66,6 +43,8 @@ void init_router(){
 }
 
 int main(){
+    auto& info = router_info::instance();
+
     init_router();
 
     // 2계층 소켓 생성
@@ -91,9 +70,6 @@ int main(){
     socklen_t saddr_len;
     time_t last_cleanup_time = time(NULL); // 마지막 청소 시간
     
-    if(debug_mode_main){
-        printf("[main] loop start\n");
-    }
     while(true){
         time_t current_time = time(NULL);
         if (current_time - last_cleanup_time >= 1) {
@@ -122,8 +98,8 @@ int main(){
 
         eth = reinterpret_cast<struct ETH_HEADER*>(buffer);
 
-        if(memcmp(eth->source_mac, my_mac_lan.mac, 6) == 0 
-            || memcmp(eth->source_mac, my_mac_wan.mac, 6) == 0){
+        if(memcmp(eth->source_mac, info.my_mac_lan.mac, 6) == 0 
+            || memcmp(eth->source_mac, info.my_mac_wan.mac, 6) == 0){
             //내부에서 보낸 패킷인 경우
             continue;
         }

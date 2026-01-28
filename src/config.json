@@ -1,0 +1,38 @@
+{
+    "wifi": {
+        "ssid": "test",
+        "password": "123456789",
+        "channel": 7,
+        "country_code": "US"
+    },
+
+    "debug": {
+        "save_to_file": true,
+        "file_path": "../log/router.log",
+        "categories": {
+          "core": true, 
+          "traffic": false,
+          "nat": true,
+          "dhcp": true,
+          "security": true
+        }
+    },
+
+    "nat": {
+        "tcp_timeout": 300,
+        "udp_timeout": 120,
+        "icmp_timeout": 60
+    },
+
+    "dhcp": {
+        "range_start": "10.0.0.2",
+        "range_end": "10.0.0.254",
+        "lease_time": 3600,
+        "dns_server": "8.8.8.8"
+    },
+
+    "firewall": {
+        "default_policy": "ACCEPT",
+        "block_list": []
+    }
+}

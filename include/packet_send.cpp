@@ -15,22 +15,11 @@
 #include "./packets.h"
 #include "./nat.h"
 
-extern bool debug_mode_packet_send;
-
-std::map<uint32_t, struct MAC_ADDRESS> arp_table;
-std::map<uint32_t, std::queue<std::vector<char>>> pending_packets;
-
-extern struct MAC_ADDRESS my_mac_lan;
-extern struct MAC_ADDRESS my_mac_wan;
-
-extern std::string my_interface_lan;
-extern std::string my_interface_wan;
-
 void init_mac_address(){
-    arp_table.clear();
+    router_info::instance().arp_table.clear();
 
     // arp_table[inet_addr("172.16.102.1")] = {0x2c, 0xfa, 0xa2, 0xfd, 0x55, 0xb8}; // wlan0 MAC 주소
-    arp_table[inet_addr("0.0.0.0")] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff}; // 브로드캐스트 주소
+    // arp_table[inet_addr("0.0.0.0")] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff}; // 브로드캐스트 주소
     // arp_table[inet_addr("10.0.0.2")] = {0x00, 0x2b, 0x67, 0xfe, 0x96, 0x4e}; // 노트북 MAC 주소 
 }
 
@@ -63,30 +52,19 @@ void arp_broadcast_send_handler(int sock, uint32_t next_hop, int if_index, struc
 
     
     size_t size = sendto(sock, buffer, sizeof(buffer), 0, (struct sockaddr*)&sll, sizeof(sll));
-    if(debug_mode_packet_send && size < 0){
-        printf("[packet_send] error sending packets in arp_broadcast_send_handler\n");
-    }
 }   
 
 void pending_packet_send_handler(std::queue<std::vector<char>>& queue, int sock, uint32_t next_hop, int if_index){
-    if(debug_mode_packet_send){
-        printf("[packet_send] sending pending queue of ip %d.%d.%d.%d.\n",
-                    ((htonl(next_hop) >> 24) & 0xFF),
-                    ((htonl(next_hop) >> 16) & 0xFF),
-                    ((htonl(next_hop) >>  8) & 0xFF),
-                    ((htonl(next_hop)      ) & 0xFF)
-                );
-    }
-
     while(!queue.empty()){
         std::vector<char> packet_vector = queue.front();
         queue.pop();
 
         char* packet = packet_vector.data();
 
-        if(debug_mode_packet_send && packet_vector.size() > 1514){
-            printf("[packet_send] packet size too big(%d)\n", packet_vector.size());
-        }
+        // debug 모드에 나중에 추가
+        // if(packet_vector.size() > 1514){
+        //     printf("[packet_send] packet size too big(%d)\n", packet_vector.size());
+        // }
 
         struct ETH_HEADER* eth_packet = reinterpret_cast<ETH_HEADER*>(packet);
         struct MAC_ADDRESS* dest_mac = get_mac_address(next_hop);
@@ -104,9 +82,11 @@ void pending_packet_send_handler(std::queue<std::vector<char>>& queue, int sock,
         memcpy(sll.sll_addr, dest_mac->mac, 6);
 
         size_t size = sendto(sock, packet, packet_vector.size(), 0, (struct sockaddr*)&sll, sizeof(sll));
-        if(debug_mode_packet_send && size < 0){
-            printf("[packet_send] error sending packets in pending_packet_send_handler\n");
-        }
+        
+        // debug 모드에 나중에 추가
+        // if(size < 0){
+        //     printf("[packet_send] error sending packets in pending_packet_send_handler\n");
+        // }
     }
 }
 
@@ -116,14 +96,16 @@ void pending_packet_send_handler(std::queue<std::vector<char>>& queue, int sock,
  * @return MAC 주소
  */
 struct MAC_ADDRESS* get_mac_address(uint32_t ip_address){
-    if(arp_table.find(ip_address) != arp_table.end()){
-        return &arp_table[ip_address];
+    auto& info = router_info::instance();
+    if(info.arp_table.find(ip_address) != info.arp_table.end()){
+        return &info.arp_table[ip_address];
     }
 
     return NULL; // 브로드캐스트 주소 반환
 }
 
 void eth_send_handler(int sock_raw, char* buffer, uint32_t next_hop_ip, size_t packet_len, char* interface_name){
+    auto& info = router_info::instance();
     struct ETH_HEADER *eth = reinterpret_cast<struct ETH_HEADER*>(buffer);
     struct sockaddr_ll socket_address;
 
@@ -134,11 +116,11 @@ void eth_send_handler(int sock_raw, char* buffer, uint32_t next_hop_ip, size_t p
     socket_address.sll_ifindex = if_index;
 
     // 이더넷 헤더 수정
-    struct MAC_ADDRESS* src_mac = &my_mac_lan; // 기본값
-    uint32_t src_ip = my_ipv4_lan_ip;
-    if(strcmp(interface_name, my_interface_wan.data()) == 0) {
-        src_mac = &my_mac_wan;
-        src_ip = my_ipv4_wan_ip;
+    struct MAC_ADDRESS* src_mac = &info.my_mac_lan; // 기본값
+    uint32_t src_ip = info.my_ipv4_lan_ip;
+    if(strcmp(interface_name, info.my_interface_wan.data()) == 0) {
+        src_mac = &info.my_mac_wan;
+        src_ip = info.my_ipv4_wan_ip;
     }
     memcpy(eth->source_mac, src_mac->mac, 6);
 
@@ -146,16 +128,8 @@ void eth_send_handler(int sock_raw, char* buffer, uint32_t next_hop_ip, size_t p
     if(dest_mac == NULL){
         // 일단 송신 중단하고 큐에 담기
         std::vector<char> packet_copy(buffer, buffer + packet_len);
-        pending_packets[next_hop_ip].push(packet_copy);
+        info.pending_packets[next_hop_ip].push(packet_copy);
 
-        if(debug_mode_packet_send){
-            printf("[packet_send] can't find mac of ip %d.%d.%d.%d. sending arp request.\n",
-                    ((htonl(next_hop_ip) >> 24) & 0xFF),
-                    ((htonl(next_hop_ip) >> 16) & 0xFF),
-                    ((htonl(next_hop_ip) >>  8) & 0xFF),
-                    ((htonl(next_hop_ip)      ) & 0xFF)
-                );
-        }
         // 브로드캐스트 수행
         arp_broadcast_send_handler(sock_raw, next_hop_ip, if_index, src_mac, src_ip);
 
@@ -171,7 +145,6 @@ void eth_send_handler(int sock_raw, char* buffer, uint32_t next_hop_ip, size_t p
                                (struct sockaddr*)&socket_address, sizeof(socket_address));
 
     if(sent_size < 0){
-        print_packet_info("[packet_send] ", buffer);
         print_errno_message("[packet_send] Error in sendto : ");
     } else {
         // if(debug_mode_packet_send){
@@ -200,8 +173,9 @@ void dhcp_send_handler(int sock, char* buffer, int packet_len, int if_index){
     if (sent_size < 0) {
         print_errno_message("Error in send_dhcp_response: ");
     } else {
-        if(debug_mode_packet_send){
-            printf("[packet_send] Response Sent (%ld bytes) via Interface Index %d\n", sent_size, if_index);
-        }
+        // 나중에 debug 추가
+        // if(debug_mode_packet_send){
+        //     printf("[packet_send] Response Sent (%ld bytes) via Interface Index %d\n", sent_size, if_index);
+        // }
     }
 }
