@@ -8,20 +8,11 @@ void init_firewall_table(){
     router_info::instance().firewall_table.clear();
 
     // create_firewall_entry({
-    //     .source_ip = inet_addr("10.0.0.2"),
+    //     .source_ip = inet_addr("10.0.0.3"),
     //     .destination_ip = 0,
-    //     .protocol = IPV4_HEADER_PROTOCOL_CONSTANTS::TCP_PROTOCOL,
+    //     .protocol = 0,
     //     .source_port = 0,
-    //     .destination_port = htons(443),
-    //     .action = FIREWALL_ACTION_CONSTANTS::REJECT
-    // });
-
-    // create_firewall_entry({
-    //     .source_ip = inet_addr("10.0.0.2"),
-    //     .destination_ip = 0,
-    //     .protocol = IPV4_HEADER_PROTOCOL_CONSTANTS::TCP_PROTOCOL,
-    //     .source_port = 0,
-    //     .destination_port = htons(80),
+    //     .destination_port = 0,
     //     .action = FIREWALL_ACTION_CONSTANTS::REJECT
     // });
 

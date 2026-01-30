@@ -109,15 +109,10 @@ NAT_TABLE_ENTRY find_nat_entry_by_external(uint8_t protocol, uint16_t external_p
     return NAT_TABLE_ENTRY{0, 0, 0, 0, 0};
 }
 
-const int TCP_TIMEOUT = 300;
-const int UDP_TIMEOUT = 120;
-const int ICMP_TIMEOUT = 60;
-
 void cleanup_expired_nat_entries() {
     auto& info = router_info::instance();
     time_t current_time = time(NULL);
     
-    // wan_to_lan_table을 순회하며 검사 (외부 포트가 Key이므로 관리가 쉬움)
     auto it = info.wan_to_lan_table.begin();
     
     while (it != info.wan_to_lan_table.end()) {
@@ -127,20 +122,24 @@ void cleanup_expired_nat_entries() {
         int timeout_limit = 1000000;
         switch(entry.protocol){
             case IPV4_HEADER_PROTOCOL_CONSTANTS::TCP_PROTOCOL:
-                timeout_limit = TCP_TIMEOUT;
+                timeout_limit = info.TCP_TIMEOUT;
                 break;
             
             case IPV4_HEADER_PROTOCOL_CONSTANTS::UDP_PROTOCOL:
-                timeout_limit = UDP_TIMEOUT;
+                timeout_limit = info.UDP_TIMEOUT;
                 break;
 
             case IPV4_HEADER_PROTOCOL_CONSTANTS::ICMP_PROTOCOL:
-                timeout_limit = ICMP_TIMEOUT;
+                timeout_limit = info.ICMP_TIMEOUT;
                 break;
         }
         
         // timeout 적용
         if (diff > timeout_limit) {
+            if(info.debug_mode_nat){
+                printf("[nat] erasing timeout entry : %d(lan) - %d(wan) \n", entry.internal_port, entry.external_port);
+            }
+
             switch(entry.protocol){
                 case IPV4_HEADER_PROTOCOL_CONSTANTS::TCP_PROTOCOL:{
                     int idx = entry.external_port - 10000;
@@ -151,7 +150,7 @@ void cleanup_expired_nat_entries() {
                 }
                 
                 case IPV4_HEADER_PROTOCOL_CONSTANTS::UDP_PROTOCOL:{
-                    int idx = entry.external_port - 30000;
+                    int idx = entry.external_port - 10000;
                     if(idx >= 0 && idx < 20000) info.is_udp_port_allocated[idx / 8] &= ~(1 << (idx % 8));
                     uint64_t key_internal = make_nat_key(entry.ip, entry.internal_port, IPV4_HEADER_PROTOCOL_CONSTANTS::UDP_PROTOCOL);
                     info.lan_to_wan_table.erase(key_internal);
@@ -283,11 +282,17 @@ void nat_outbound_handler(struct IPV4_HEADER* ipv4_packet){
                 // 외부 포트 할당
                 uint16_t external_port = allocate_tcp_port();
                 if(external_port == 0){
+                    if(info.debug_mode_nat){
+                        printf("[nat] can't allocate new outbound port\n");
+                    }
                     return; // 포트 부족
                 }
                 nat_entry.external_port = external_port;
-
                 update_nat_table(key_internal, nat_entry);
+
+                if(info.debug_mode_nat){
+                    printf("[nat] adding new outbound session  %d(lan) - %d(wan) \n", nat_entry.internal_port, nat_entry.external_port);
+                }
             }else{
             // 포트 할당 되어있으면 그대로 사용
             // 이미 할당된 포트 있음 -> 시간 갱신

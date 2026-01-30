@@ -1,7 +1,9 @@
+#include <cstring>
 #include <iostream>
 #include <cerrno>
 #include <system_error>
 #include <string>
+// #include <cstring>
 
 #include <arpa/inet.h>
 
@@ -22,6 +24,13 @@ int print_errno_message(const string& header){
     cerr << header << ec.message() << endl;
 
     return ec.value();
+}
+
+void print_debug_header(const std::string type, const string message){
+    // 헤더 길이는 가로 20
+    char header[21] = "===";
+    strcpy(header + 3, message.data());
+    printf("\n=== [%s] %s ===============\n", type.data(), message.data());
 }
 
 /**

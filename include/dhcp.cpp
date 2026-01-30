@@ -29,7 +29,7 @@ uint16_t allocate_ip_num(){
 void refresh_dhcp_entries(){
     auto& info = router_info::instance();
     time_t now = time(NULL);
-    for(int i = 2; i <= 254; ++i){
+    for(int i = info.dhcp_ip_start_num; i <= info.dhcp_ip_end_num; ++i){
         if(info.allocated_dhcp_ip_table[i - 2].first && info.allocated_dhcp_ip_table[i - 2].second > now){
             info.allocated_dhcp_ip_table[i - 2].first = false;
         }
@@ -45,6 +45,11 @@ int dhcp_discover_handler(char* buffer){
     struct DHCP_HEADER* dhcp_packet = reinterpret_cast<DHCP_HEADER*>((uint8_t*)udp_packet + sizeof(struct UDP_HEADER));
 
     uint16_t allocated_ip_num = allocate_ip_num();
+
+    if(info.debug_mode_dhcp){
+        printf("[dhcp] discover packet discovered. offering 10.0.0.%d\n", allocated_ip_num);
+    }
+
     if(allocated_ip_num >= 255)
         return 0;  
     dhcp_packet->op = 2;
@@ -55,7 +60,7 @@ int dhcp_discover_handler(char* buffer){
     char ip_num_buffer[20];
     sprintf(ip_num_buffer, "10.0.0.%d", allocated_ip_num);
     dhcp_packet->yiaddr = inet_addr(ip_num_buffer);
-    dhcp_packet->siaddr = inet_addr("10.0.0.1");
+    dhcp_packet->siaddr = info.my_ipv4_lan_ip;
     dhcp_packet->giaddr = inet_addr("0.0.0.0");
     memset(dhcp_packet->sname, 0, 64);
     memset(dhcp_packet->file, 0, 128);
@@ -70,15 +75,15 @@ int dhcp_discover_handler(char* buffer){
 
     // Option 3: Router (10.0.0.1)
     *opt++ = 3; *opt++ = 4;
-    *(uint32_t*)opt = inet_addr("10.0.0.1"); opt += 4;
+    *(uint32_t*)opt = info.my_ipv4_lan_ip; opt += 4;
 
     // Option 6: DNS (8.8.8.8)
     *opt++ = 6; *opt++ = 4;
-    *(uint32_t*)opt = inet_addr("8.8.8.8"); opt += 4;
+    *(uint32_t*)opt = info.dhcp_dns_server; opt += 4;
 
     // Option 54: Server ID (10.0.0.1) - 필수
     *opt++ = 54; *opt++ = 4;
-    *(uint32_t*)opt = inet_addr("10.0.0.1"); opt += 4;
+    *(uint32_t*)opt = info.my_ipv4_lan_ip; opt += 4;
 
     *opt++ = 51; *opt++ = 4;
     *(uint32_t*)opt = htonl(info.dhcp_offering_time); opt += 4;   
@@ -98,7 +103,7 @@ int dhcp_discover_handler(char* buffer){
     ipv4_packet->time_to_live = 64;
     ipv4_packet->protocol = IPV4_HEADER_PROTOCOL_CONSTANTS::UDP_PROTOCOL;
     ipv4_packet->header_checksum = 0;
-    ipv4_packet->source_ip = inet_addr("10.0.0.1");
+    ipv4_packet->source_ip = info.my_ipv4_lan_ip;
     ipv4_packet->destination_ip = inet_addr("255.255.255.255");
     ipv4_packet->header_checksum = calculate_checksum((uint16_t*)ipv4_packet, 20);
 
@@ -155,7 +160,7 @@ int dhcp_request_handler(char* buffer){
     dhcp_packet->secs = 0;
 
     dhcp_packet->yiaddr = htonl( (10 << 24) | requested_ip_last_byte); // 10.0.0.x
-    dhcp_packet->siaddr = inet_addr("10.0.0.1");
+    dhcp_packet->siaddr = info.my_ipv4_lan_ip;
     dhcp_packet->giaddr = inet_addr("0.0.0.0");
     dhcp_packet->magic_cookie = htonl(0x63825363);
 
@@ -168,15 +173,15 @@ int dhcp_request_handler(char* buffer){
 
     // Option 3: Router (10.0.0.1)
     *opt++ = 3; *opt++ = 4;
-    *(uint32_t*)opt = inet_addr("10.0.0.1"); opt += 4;
+    *(uint32_t*)opt = info.my_ipv4_lan_ip; opt += 4;
 
     // Option 6: DNS (8.8.8.8)
     *opt++ = 6; *opt++ = 4;
-    *(uint32_t*)opt = inet_addr("8.8.8.8"); opt += 4;
+    *(uint32_t*)opt = info.dhcp_dns_server; opt += 4;
 
     // Option 54: Server ID (10.0.0.1) - 필수
     *opt++ = 54; *opt++ = 4;
-    *(uint32_t*)opt = inet_addr("10.0.0.1"); opt += 4;
+    *(uint32_t*)opt = info.my_ipv4_lan_ip; opt += 4;
 
     *opt++ = 51; *opt++ = 4;
     *(uint32_t*)opt = htonl(info.dhcp_offering_time); opt += 4;   
@@ -202,7 +207,7 @@ int dhcp_request_handler(char* buffer){
     else{
         ipv4_packet->destination_ip = inet_addr("255.255.255.255");
     }
-    ipv4_packet->source_ip = inet_addr("10.0.0.1");
+    ipv4_packet->source_ip = info.my_ipv4_lan_ip;
     ipv4_packet->header_checksum = calculate_checksum((uint16_t*)ipv4_packet, 20);
 
     if(is_renewal){
@@ -215,6 +220,10 @@ int dhcp_request_handler(char* buffer){
     info.arp_table[dhcp_packet->yiaddr] = *(MAC_ADDRESS*)eth_packet->source_mac;
     memcpy((MAC_ADDRESS*)eth_packet->source_mac, &info.my_mac_lan, 6);
     eth_packet->ethertype = htons(ETH_HEADER_CONSTANTS::ETH_P_IPV4);
+
+    if(info.debug_mode_dhcp){
+        printf("[dhcp] request packet detected. ack packet 10.0.0.%d(%d) sent.\n", requested_ip_last_byte, info.dhcp_offering_time);
+    }
 
     return (uint8_t*)opt - (uint8_t*)buffer;
 }

@@ -4,6 +4,7 @@
 #include <string>
 #include <cstdint>
 
+void print_debug_header(const std::string type, const std::string message);
 int print_errno_message(const std::string& header);
 void print_packet_info(char* msg, char* buffer);
 

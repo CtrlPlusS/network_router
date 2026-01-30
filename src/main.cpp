@@ -25,6 +25,15 @@ void init_router(){
     auto& info = router_info::instance();
 
     // 라우터 정보 초기화
+    info.load_config();
+
+    print_debug_header("core", "debug_info");
+    printf("core     : %5s\n", info.debug_mode_core ? "true" : "false");
+    printf("traffic  : %5s\n", info.debug_mode_traffic ? "true" : "false");
+    printf("nat      : %5s\n", info.debug_mode_nat ? "true" : "false");
+    printf("dhcp     : %5s\n", info.debug_mode_dhcp ? "true" : "false");
+    printf("security : %5s\n", info.debug_mode_security ? "true" : "false");
+    
     info.init_router_info();
 
     // 라우팅 테이블 초기화
@@ -40,6 +49,10 @@ void init_router(){
     init_firewall_table();
 
     init_dhcp_table();
+
+    if(info.debug_mode_core){
+        printf("[core] router setting done.\n");
+    }
 }
 
 int main(){
@@ -76,9 +89,6 @@ int main(){
             cleanup_expired_nat_entries();
             refresh_dhcp_entries();
             last_cleanup_time = current_time;
-            // if(debug_mode_main){
-            //     printf("[main] nat clean done\n");
-            // }
         }
 
         saddr_len = sizeof(saddr);
@@ -104,14 +114,11 @@ int main(){
             continue;
         }
 
-        uint16_t ptype = ntohs(eth->ethertype);
+        if(info.debug_mode_traffic){
+            printf("[traffic] type %x, len %d packet in \n", eth->ethertype, saddr_len);
+        }
 
-        // if(debug_mode_main){
-        //     if(memcmp(eth->destination_mac, my_mac_lan.mac, 6) == 0 
-        //     || memcmp(eth->destination_mac, my_mac_wan.mac, 6) == 0){
-        //         printf("[main] Packet received on interface index %d, Ethertype: 0x%04X\n", saddr.sll_ifindex, ptype);
-        //     }
-        // }
+        uint16_t ptype = ntohs(eth->ethertype);
 
         switch(ptype){
             case ETH_HEADER_CONSTANTS::ETH_P_IPV4:{

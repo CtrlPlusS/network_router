@@ -91,31 +91,8 @@ bool ipv4_packet_drop_check(IPV4_HEADER* ipv4_packet){
         return true;
 
     if(ipv4_packet->time_to_live <= 1){ // TTL 만료 시 패킷 드롭
-        // struct ETH_HEADER *eth = reinterpret_cast<struct ETH_HEADER*>(buffer);
-        // if(debug_mode_packet_read){
-        //     printf("[packet_read] %x:%x:%x:%x:%x:%x(%d.%d.%d.%d)-> %x:%x:%x:%x:%x:%x(%d.%d.%d.%d) TTL expired, dropping packet\n",
-        //         eth->source_mac[0], eth->source_mac[1], eth->source_mac[2],
-        //         eth->source_mac[3], eth->source_mac[4], eth->source_mac[5],
-        //         (htonl(ipv4_packet->source_ip) >> 24) & 0xFF,
-        //         (htonl(ipv4_packet->source_ip) >> 16) & 0xFF,
-        //         (htonl(ipv4_packet->source_ip) >> 8) & 0xFF,
-        //         (htonl(ipv4_packet->source_ip)) & 0xFF,
-        //         eth->destination_mac[0], eth->destination_mac[1], eth->destination_mac[2],
-        //         eth->destination_mac[3], eth->destination_mac[4], eth->destination_mac[5],
-        //         (htonl(ipv4_packet->destination_ip) >> 24) & 0xFF,
-        //         (htonl(ipv4_packet->destination_ip) >> 16) & 0xFF,
-        //         (htonl(ipv4_packet->destination_ip) >> 8) & 0xFF,
-        //         (htonl(ipv4_packet->destination_ip)) & 0xFF);
-        // }
         return true;
     }
-
-    // if(ipv4_packet->protocol == IPV4_HEADER_PROTOCOL_CONSTANTS::UDP_PROTOCOL){
-    //     UDP_HEADER* udp_header = reinterpret_cast<UDP_HEADER*>((uint8_t*)ipv4_packet + (ipv4_packet->version_ihl & 0x0F) * 4);
-    //     if (udp_header->destination_port == htons(67) || udp_header->destination_port == htons(68)) {
-    //         return true;
-    //     }
-    // }
 
     uint8_t firewall_check;
     switch(ipv4_packet->protocol){
@@ -140,7 +117,8 @@ bool ipv4_packet_drop_check(IPV4_HEADER* ipv4_packet){
 
     switch(firewall_check){
         case FIREWALL_ACTION_CONSTANTS::REJECT:{
-            printf("[packet_read] -> [firewall] packet %d.%d.%d.%d -> %d.%d.%d.%d rejected.\n",
+            if(info.debug_mode_security){
+                printf("[security] packet %d.%d.%d.%d -> %d.%d.%d.%d rejected.\n",
                     (htonl(ipv4_packet->source_ip) >> 24) & 0xFF,
                     (htonl(ipv4_packet->source_ip) >> 16) & 0xFF,
                     (htonl(ipv4_packet->source_ip) >>  8) & 0xFF,
@@ -152,6 +130,7 @@ bool ipv4_packet_drop_check(IPV4_HEADER* ipv4_packet){
                         htonl(ipv4_packet->destination_ip)        & 0xFF
                 );
             }
+        }
         
         case FIREWALL_ACTION_CONSTANTS::DROP:{
             return true;
@@ -169,23 +148,6 @@ uint32_t ipv4_read_handler(char* buffer, int sock, int if_index){
 
     if(ipv4_packet_drop_check(ipv4_packet))
         return 0;
-
-    // if(debug_mode_packet_read){
-    //     printf("[packet_read] packet read! %d.%d.%d.%d(%s) -> %d.%d.%d.%d(%s) (Len: %d, protocol: %d)\n", 
-    //         (htonl(ipv4_packet->source_ip) >> 24) & 0xFF,
-    //         (htonl(ipv4_packet->source_ip) >> 16) & 0xFF,
-    //         (htonl(ipv4_packet->source_ip) >> 8) & 0xFF,
-    //         (htonl(ipv4_packet->source_ip)) & 0xFF,
-    //         is_lan_ip(ntohl(ipv4_packet->source_ip)) ? "lan" : "wan",
-    //         (htonl(ipv4_packet->destination_ip) >> 24) & 0xFF,
-    //         (htonl(ipv4_packet->destination_ip) >> 16) & 0xFF,
-    //         (htonl(ipv4_packet->destination_ip) >> 8) & 0xFF,
-    //         (htonl(ipv4_packet->destination_ip)) & 0xFF,
-    //         is_lan_ip(ntohl(ipv4_packet->destination_ip)) ? "lan" : "wan",
-    //         ntohs(ipv4_packet->total_length),
-    //         ipv4_packet->protocol
-    //     );
-    // }
 
     // udp이고 destination_port가 67인것들은 dhcp처리
     if(ipv4_packet->protocol == IPV4_HEADER_PROTOCOL_CONSTANTS::UDP_PROTOCOL){

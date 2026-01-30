@@ -52,7 +52,7 @@ public:
         return info;
     }
 
-    std::string config_file_pwd = "./config.json"; // = "/home/konan0207/router_project/src/config.json";
+    std::string config_file_pwd = "../src/config.json"; // = "/home/konan0207/router_project/src/config.json";
 
     // firewall
     std::vector<FIREWALL_TABLE_ENTRY> firewall_table;
@@ -73,6 +73,10 @@ public:
     uint8_t is_udp_port_allocated[2501] = {0};
     uint8_t is_icmp_port_allocated[2501] = {0};
 
+    int TCP_TIMEOUT = 300;
+    int UDP_TIMEOUT = 120;
+    int ICMP_TIMEOUT = 60;
+
     // arp
     std::map<uint32_t, struct MAC_ADDRESS> arp_table;
     std::map<uint32_t, std::queue<std::vector<char>>> pending_packets;
@@ -81,9 +85,13 @@ public:
     std::vector<ROUTE_ENTRY> routing_table;
 
     // dhcp
-    uint16_t dhcp_offering_time = 0;
     std::pair<bool, time_t> allocated_dhcp_ip_table[253];
     
+    uint8_t dhcp_ip_start_num = 2;
+    uint8_t dhcp_ip_end_num = 254;
+    uint16_t dhcp_offering_time = 3600;
+    uint32_t dhcp_dns_server = inet_addr("8.8.8.8");
+
     // router info
     struct MAC_ADDRESS my_mac_lan = {0};
     struct MAC_ADDRESS my_mac_wan = {0};

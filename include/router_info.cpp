@@ -4,10 +4,12 @@
 #include <sys/ioctl.h>
 #include <arpa/inet.h>
 #include <net/if.h>
+#include <fstream>
 
 #include "./router_info.h"
 #include "./common.h"
 #include "./packets.h"
+#include "./firewall.h"
 
 std::string router_info::exec_command(const char* command){
     FILE *fp;
@@ -106,8 +108,70 @@ void router_info::init_router_info(){
     get_lan_info(sock);
 
     close(sock);
+
+    if(debug_mode_core){
+        print_debug_header("core", "router_info");
+        printf("[core] [lan] mac : %x:%x:%x:%x:%x:%x\n", 
+            my_mac_lan.mac[0], my_mac_lan.mac[1], my_mac_lan.mac[2], my_mac_lan.mac[3], my_mac_lan.mac[4], my_mac_lan.mac[5]);
+        printf("[core] [lan] ip : %d.%d.%d.%d\n",
+            (htonl(my_ipv4_lan_ip) >> 24) & 0xFF,
+            (htonl(my_ipv4_lan_ip) >> 16) & 0xFF,
+            (htonl(my_ipv4_lan_ip) >>  8) & 0xFF,
+            (htonl(my_ipv4_lan_ip)      ) & 0xFF);
+        printf("[core] [lan] gatway : %d.%d.%d.%d\n", 
+            (htonl(my_ipv4_lan_gateway) >> 24) & 0xFF,
+            (htonl(my_ipv4_lan_gateway) >> 16) & 0xFF,
+            (htonl(my_ipv4_lan_gateway) >>  8) & 0xFF,
+            (htonl(my_ipv4_lan_gateway)      ) & 0xFF);
+        printf("[core] [lan] interface : %s\n", my_interface_lan.data());
+
+        printf("[core] [wan] mac : %x:%x:%x:%x:%x:%x\n", 
+            my_mac_lan.mac[0], my_mac_wan.mac[1], my_mac_wan.mac[2], my_mac_wan.mac[3], my_mac_wan.mac[4], my_mac_wan.mac[5]);
+        printf("[core] [wan] ip : %d.%d.%d.%d\n",
+            (htonl(my_ipv4_wan_ip) >> 24) & 0xFF,
+            (htonl(my_ipv4_wan_ip) >> 16) & 0xFF,
+            (htonl(my_ipv4_wan_ip) >>  8) & 0xFF,
+            (htonl(my_ipv4_wan_ip)      ) & 0xFF);
+        printf("[core] [wan] gatway : %d.%d.%d.%d\n", 
+            (htonl(my_ipv4_wan_gateway) >> 24) & 0xFF,
+            (htonl(my_ipv4_wan_gateway) >> 16) & 0xFF,
+            (htonl(my_ipv4_wan_gateway) >>  8) & 0xFF,
+            (htonl(my_ipv4_wan_gateway)      ) & 0xFF);
+        printf("[core] [wan] interface : %s\n", my_interface_wan.data());
+    }
 }
 
 void router_info::load_config(){
-    // json 불러와서 디버그
+    std::ifstream file(config_file_pwd);
+    json data = json::parse(file);
+
+    auto debug_options = data["debug"]["categories"]; 
+    debug_mode_core = debug_options["core"];
+    debug_mode_traffic = debug_options["traffic"];
+    debug_mode_nat = debug_options["nat"];
+    debug_mode_dhcp = debug_options["dhcp"];
+    debug_mode_security = debug_options["security"];
+
+    auto nat_options = data["nat"];
+    TCP_TIMEOUT = nat_options["tcp_timeout"];
+    UDP_TIMEOUT = nat_options["udp_timeout"];
+    ICMP_TIMEOUT = nat_options["icmp_timeout"];
+
+    auto dhcp_options = data["dhcp"];
+    dhcp_ip_start_num = dhcp_options["range_start"];
+    dhcp_ip_start_num = dhcp_options["range_end"];
+    dhcp_offering_time = dhcp_options["lease_time"];
+    dhcp_dns_server = inet_addr(std::string(dhcp_options["dns_server"]).c_str());
+
+    auto firewall_options = data["firewall"];
+    for(auto block_entry : firewall_options["block_list"]){
+        create_firewall_entry({
+            .source_ip = inet_addr(std::string(block_entry).c_str()),
+            .destination_ip = 0,
+            .protocol = 0,
+            .source_port = 0,
+            .destination_port = 0,
+            .action = FIREWALL_ACTION_CONSTANTS::DROP
+        });
+    }
 }
