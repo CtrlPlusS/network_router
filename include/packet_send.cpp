@@ -148,7 +148,7 @@ void eth_send_handler(int sock_raw, char* buffer, uint32_t next_hop_ip, size_t p
         print_errno_message("[packet_send] Error in sendto : ");
     } else {
         if(info.debug_mode_traffic){
-            print_debug_header("traffic", "packet send");
+            DEBUG_HEADER("traffic", "packet send");
             print_packet_info("[traffic]", buffer);
         }
     }

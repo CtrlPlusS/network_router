@@ -11,7 +11,7 @@
         "file_path": "../log/router.log",
         "categories": {
           "core": false, 
-          "traffic": false,
+          "traffic": true,
           "nat": false,
           "dhcp": true,
           "security": true

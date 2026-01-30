@@ -118,7 +118,7 @@ bool ipv4_packet_drop_check(IPV4_HEADER* ipv4_packet){
     switch(firewall_check){
         case FIREWALL_ACTION_CONSTANTS::REJECT:{
             if(info.debug_mode_security){
-                printf("[security] packet %d.%d.%d.%d -> %d.%d.%d.%d rejected.\n",
+                PRINT_LOG_MESSAGE("[security] packet %d.%d.%d.%d -> %d.%d.%d.%d rejected.\n",
                     (htonl(ipv4_packet->source_ip) >> 24) & 0xFF,
                     (htonl(ipv4_packet->source_ip) >> 16) & 0xFF,
                     (htonl(ipv4_packet->source_ip) >>  8) & 0xFF,

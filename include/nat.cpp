@@ -137,7 +137,7 @@ void cleanup_expired_nat_entries() {
         // timeout 적용
         if (diff > timeout_limit) {
             if(info.debug_mode_nat){
-                printf("[nat] erasing timeout entry : %d(lan) - %d(wan) \n", entry.internal_port, entry.external_port);
+                PRINT_LOG_MESSAGE("[nat] erasing timeout entry : %d(lan) - %d(wan) \n", entry.internal_port, entry.external_port);
             }
 
             switch(entry.protocol){
@@ -283,7 +283,7 @@ void nat_outbound_handler(struct IPV4_HEADER* ipv4_packet){
                 uint16_t external_port = allocate_tcp_port();
                 if(external_port == 0){
                     if(info.debug_mode_nat){
-                        printf("[nat] can't allocate new outbound port\n");
+                        PRINT_LOG_MESSAGE("[nat] can't allocate new outbound port\n");
                     }
                     return; // 포트 부족
                 }
@@ -291,7 +291,7 @@ void nat_outbound_handler(struct IPV4_HEADER* ipv4_packet){
                 update_nat_table(key_internal, nat_entry);
 
                 if(info.debug_mode_nat){
-                    printf("[nat] adding new outbound session  %d(lan) - %d(wan) \n", nat_entry.internal_port, nat_entry.external_port);
+                    PRINT_LOG_MESSAGE("[nat] adding new outbound session  %d(lan) - %d(wan) \n", nat_entry.internal_port, nat_entry.external_port);
                 }
             }else{
             // 포트 할당 되어있으면 그대로 사용
@@ -340,8 +340,6 @@ void nat_outbound_handler(struct IPV4_HEADER* ipv4_packet){
             // 할당된 포트로 udp 패킷 변조
             udp_packet->source_port = htons(nat_entry.external_port);
             ipv4_packet->source_ip = info.my_ipv4_wan_ip;
-            
-            update_nat_table(key_internal, nat_entry);
 
             // checksum 재계산
             udp_calculate_checksum(udp_packet, ipv4_packet);

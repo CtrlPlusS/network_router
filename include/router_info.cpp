@@ -110,34 +110,34 @@ void router_info::init_router_info(){
     close(sock);
 
     if(debug_mode_core){
-        print_debug_header("core", "router_info");
-        printf("[core] [lan] mac : %x:%x:%x:%x:%x:%x\n", 
+        DEBUG_HEADER("core", "router_info");
+        PRINT_LOG_MESSAGE("[core] [lan] mac : %x:%x:%x:%x:%x:%x\n", 
             my_mac_lan.mac[0], my_mac_lan.mac[1], my_mac_lan.mac[2], my_mac_lan.mac[3], my_mac_lan.mac[4], my_mac_lan.mac[5]);
-        printf("[core] [lan] ip : %d.%d.%d.%d\n",
+        PRINT_LOG_MESSAGE("[core] [lan] ip : %d.%d.%d.%d\n",
             (htonl(my_ipv4_lan_ip) >> 24) & 0xFF,
             (htonl(my_ipv4_lan_ip) >> 16) & 0xFF,
             (htonl(my_ipv4_lan_ip) >>  8) & 0xFF,
             (htonl(my_ipv4_lan_ip)      ) & 0xFF);
-        printf("[core] [lan] gatway : %d.%d.%d.%d\n", 
+        PRINT_LOG_MESSAGE("[core] [lan] gatway : %d.%d.%d.%d\n", 
             (htonl(my_ipv4_lan_gateway) >> 24) & 0xFF,
             (htonl(my_ipv4_lan_gateway) >> 16) & 0xFF,
             (htonl(my_ipv4_lan_gateway) >>  8) & 0xFF,
             (htonl(my_ipv4_lan_gateway)      ) & 0xFF);
-        printf("[core] [lan] interface : %s\n", my_interface_lan.data());
+        PRINT_LOG_MESSAGE("[core] [lan] interface : %s\n", my_interface_lan.data());
 
-        printf("[core] [wan] mac : %x:%x:%x:%x:%x:%x\n", 
+        PRINT_LOG_MESSAGE("[core] [wan] mac : %x:%x:%x:%x:%x:%x\n", 
             my_mac_lan.mac[0], my_mac_wan.mac[1], my_mac_wan.mac[2], my_mac_wan.mac[3], my_mac_wan.mac[4], my_mac_wan.mac[5]);
-        printf("[core] [wan] ip : %d.%d.%d.%d\n",
+        PRINT_LOG_MESSAGE("[core] [wan] ip : %d.%d.%d.%d\n",
             (htonl(my_ipv4_wan_ip) >> 24) & 0xFF,
             (htonl(my_ipv4_wan_ip) >> 16) & 0xFF,
             (htonl(my_ipv4_wan_ip) >>  8) & 0xFF,
             (htonl(my_ipv4_wan_ip)      ) & 0xFF);
-        printf("[core] [wan] gatway : %d.%d.%d.%d\n", 
+        PRINT_LOG_MESSAGE("[core] [wan] gatway : %d.%d.%d.%d\n", 
             (htonl(my_ipv4_wan_gateway) >> 24) & 0xFF,
             (htonl(my_ipv4_wan_gateway) >> 16) & 0xFF,
             (htonl(my_ipv4_wan_gateway) >>  8) & 0xFF,
             (htonl(my_ipv4_wan_gateway)      ) & 0xFF);
-        printf("[core] [wan] interface : %s\n", my_interface_wan.data());
+        PRINT_LOG_MESSAGE("[core] [wan] interface : %s\n", my_interface_wan.data());
     }
 }
 
@@ -145,12 +145,13 @@ void router_info::load_config(){
     std::ifstream file(config_file_pwd);
     json data = json::parse(file);
 
-    auto debug_options = data["debug"]["categories"]; 
-    debug_mode_core = debug_options["core"];
-    debug_mode_traffic = debug_options["traffic"];
-    debug_mode_nat = debug_options["nat"];
-    debug_mode_dhcp = debug_options["dhcp"];
-    debug_mode_security = debug_options["security"];
+    auto debug_options = data["debug"]; 
+    freopen(std::string(debug_options["file_path"]).c_str(), "w", stdout);
+    debug_mode_core = debug_options["categories"]["core"];
+    debug_mode_traffic = debug_options["categories"]["traffic"];
+    debug_mode_nat = debug_options["categories"]["nat"];
+    debug_mode_dhcp = debug_options["categories"]["dhcp"];
+    debug_mode_security = debug_options["categories"]["security"];
 
     auto nat_options = data["nat"];
     TCP_TIMEOUT = nat_options["tcp_timeout"];
@@ -159,7 +160,7 @@ void router_info::load_config(){
 
     auto dhcp_options = data["dhcp"];
     dhcp_ip_start_num = dhcp_options["range_start"];
-    dhcp_ip_start_num = dhcp_options["range_end"];
+    dhcp_ip_end_num = dhcp_options["range_end"];
     dhcp_offering_time = dhcp_options["lease_time"];
     dhcp_dns_server = inet_addr(std::string(dhcp_options["dns_server"]).c_str());
 

@@ -47,7 +47,7 @@ int dhcp_discover_handler(char* buffer){
     uint16_t allocated_ip_num = allocate_ip_num();
 
     if(info.debug_mode_dhcp){
-        printf("[dhcp] discover packet discovered. offering 10.0.0.%d\n", allocated_ip_num);
+        PRINT_LOG_MESSAGE("[dhcp] discover packet discovered. offering 10.0.0.%d\n", allocated_ip_num);
     }
 
     if(allocated_ip_num >= 255)
@@ -56,10 +56,8 @@ int dhcp_discover_handler(char* buffer){
     dhcp_packet->hops = 0;
     dhcp_packet->secs = 0;
     dhcp_packet->ciaddr = inet_addr("0.0.0.0");
-
-    char ip_num_buffer[20];
-    sprintf(ip_num_buffer, "10.0.0.%d", allocated_ip_num);
-    dhcp_packet->yiaddr = inet_addr(ip_num_buffer);
+ 
+    dhcp_packet->yiaddr = (ntohl(info.my_ipv4_lan_ip) & 0xFF'FF'FF'00) | allocated_ip_num;
     dhcp_packet->siaddr = info.my_ipv4_lan_ip;
     dhcp_packet->giaddr = inet_addr("0.0.0.0");
     memset(dhcp_packet->sname, 0, 64);
@@ -131,6 +129,7 @@ int dhcp_request_handler(char* buffer){
 
     uint8_t requested_ip_last_byte = 0; // 못 찾으면 0
     bool is_renewal = (dhcp_packet->ciaddr != 0);
+    bool is_broadcast = ntohs(dhcp_packet->flags) & 0x8000;
     
     if(is_renewal){
         requested_ip_last_byte = ntohl(dhcp_packet->ciaddr) & 0xFF;
@@ -159,7 +158,7 @@ int dhcp_request_handler(char* buffer){
     dhcp_packet->hops = 0;
     dhcp_packet->secs = 0;
 
-    dhcp_packet->yiaddr = htonl( (10 << 24) | requested_ip_last_byte); // 10.0.0.x
+    dhcp_packet->yiaddr = (ntohl(info.my_ipv4_lan_ip) & 0xFF'FF'FF'00) | requested_ip_last_byte;
     dhcp_packet->siaddr = info.my_ipv4_lan_ip;
     dhcp_packet->giaddr = inet_addr("0.0.0.0");
     dhcp_packet->magic_cookie = htonl(0x63825363);
@@ -201,7 +200,7 @@ int dhcp_request_handler(char* buffer){
     ipv4_packet->time_to_live = 64;
     ipv4_packet->protocol = IPV4_HEADER_PROTOCOL_CONSTANTS::UDP_PROTOCOL;
     ipv4_packet->header_checksum = 0;
-    if(is_renewal){
+    if(is_renewal && !is_broadcast){
         ipv4_packet->destination_ip = dhcp_packet->ciaddr;
     }
     else{
@@ -210,7 +209,7 @@ int dhcp_request_handler(char* buffer){
     ipv4_packet->source_ip = info.my_ipv4_lan_ip;
     ipv4_packet->header_checksum = calculate_checksum((uint16_t*)ipv4_packet, 20);
 
-    if(is_renewal){
+    if(is_renewal && !is_broadcast){
         memcpy(eth_packet->destination_mac, eth_packet->source_mac, 6);
     }
     else{
@@ -222,7 +221,7 @@ int dhcp_request_handler(char* buffer){
     eth_packet->ethertype = htons(ETH_HEADER_CONSTANTS::ETH_P_IPV4);
 
     if(info.debug_mode_dhcp){
-        printf("[dhcp] request packet detected. ack packet 10.0.0.%d(%d) sent.\n", requested_ip_last_byte, info.dhcp_offering_time);
+        PRINT_LOG_MESSAGE("[dhcp] request packet detected. ack packet 10.0.0.%d(%d) sent.\n", requested_ip_last_byte, info.dhcp_offering_time);
     }
 
     return (uint8_t*)opt - (uint8_t*)buffer;

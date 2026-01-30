@@ -3,6 +3,7 @@
 #include <cerrno>
 #include <system_error>
 #include <string>
+#include <sys/time.h>
 // #include <cstring>
 
 #include <arpa/inet.h>
@@ -26,20 +27,13 @@ int print_errno_message(const string& header){
     return ec.value();
 }
 
-void print_debug_header(const std::string type, const string message){
-    // 헤더 길이는 가로 20
-    char header[21] = "===";
-    strcpy(header + 3, message.data());
-    printf("\n=== [%s] %s ===============\n", type.data(), message.data());
-}
-
 /**
 * @brief Print Ethernet and ARP packet information from buffer
 * @param buffer 패킷 데이터가 담긴 버퍼
  */
 void print_packet_info(char* msg, char* buffer) {
 
-    printf("%s\n", msg);
+    PRINT_LOG_MESSAGE("%s\n", msg);
     struct ETH_HEADER *eth = reinterpret_cast<struct ETH_HEADER*>(buffer);
     uint16_t ethertype = ntohs(eth->ethertype);
 

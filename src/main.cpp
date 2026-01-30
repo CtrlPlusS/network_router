@@ -5,6 +5,7 @@
 #include <cstring>
 #include <cerrno>
 // #include <system_error>
+#include <csignal>
 
 #include <sys/socket.h>
 #include <arpa/inet.h>
@@ -21,18 +22,29 @@
 #include "./firewall.h"
 #include "./dhcp.h"
 
+void emergency_flush(int signum){
+    printf("\n[system] program crashed. signum : %d\n", signum);
+    fflush(stdout);
+    exit(signum);
+}
+
 void init_router(){
     auto& info = router_info::instance();
+
+    signal(SIGINT, emergency_flush);  // Ctrl + C
+    signal(SIGSEGV, emergency_flush); // Segfault
+    signal(SIGTERM, emergency_flush); // kill
+    signal(SIGABRT, emergency_flush); // assert
 
     // 라우터 정보 초기화
     info.load_config();
 
-    print_debug_header("core", "debug_info");
-    printf("core     : %5s\n", info.debug_mode_core ? "true" : "false");
-    printf("traffic  : %5s\n", info.debug_mode_traffic ? "true" : "false");
-    printf("nat      : %5s\n", info.debug_mode_nat ? "true" : "false");
-    printf("dhcp     : %5s\n", info.debug_mode_dhcp ? "true" : "false");
-    printf("security : %5s\n", info.debug_mode_security ? "true" : "false");
+    DEBUG_HEADER("core", "debug_info");
+    PRINT_LOG_MESSAGE("core     : %5s\n", info.debug_mode_core ? "true" : "false");
+    PRINT_LOG_MESSAGE("traffic  : %5s\n", info.debug_mode_traffic ? "true" : "false");
+    PRINT_LOG_MESSAGE("nat      : %5s\n", info.debug_mode_nat ? "true" : "false");
+    PRINT_LOG_MESSAGE("dhcp     : %5s\n", info.debug_mode_dhcp ? "true" : "false");
+    PRINT_LOG_MESSAGE("security : %5s\n", info.debug_mode_security ? "true" : "false");
     
     info.init_router_info();
 
@@ -51,12 +63,15 @@ void init_router(){
     init_dhcp_table();
 
     if(info.debug_mode_core){
-        printf("[core] router setting done.\n");
+        PRINT_LOG_MESSAGE("[core] router setting done.\n");
     }
 }
 
 int main(){
     auto& info = router_info::instance();
+
+    freopen("router_log.txt", "w", stdout);
+    // setbuf(stdout, NULL);
 
     init_router();
 
@@ -115,20 +130,23 @@ int main(){
         }
 
         if(info.debug_mode_traffic){
-            printf("[traffic] type %x, len %d packet in \n", eth->ethertype, saddr_len);
+            PRINT_LOG_MESSAGE("[traffic] type %x, len %d packet in \n", eth->ethertype, saddr_len);
         }
 
         uint16_t ptype = ntohs(eth->ethertype);
 
         switch(ptype){
             case ETH_HEADER_CONSTANTS::ETH_P_IPV4:{
-                uint32_t gateway = ipv4_read_handler(buffer, sock_raw, saddr.sll_ifindex);
-                if(gateway == 0){
-                    // 목적지가 로컬인 경우 처리 생략
-                    break;
-                }       
-
                 struct IPV4_HEADER* ipv4 = reinterpret_cast<struct IPV4_HEADER*>(buffer + sizeof(struct ETH_HEADER));
+                uint32_t gateway = ipv4_read_handler(buffer, sock_raw, saddr.sll_ifindex);
+                if(ipv4->protocol == IPV4_HEADER_PROTOCOL_CONSTANTS::UDP_PROTOCOL){
+                    struct UDP_HEADER* udp = reinterpret_cast<UDP_HEADER*>((uint8_t*)ipv4 + (ipv4->version_ihl & 0x0F) * 4);
+                    if(gateway == 0 && udp->source_port != 67){
+                        // 목적지가 로컬인 경우 처리 생략
+                        break;
+                    }
+                }
+                
                 struct ROUTE_ENTRY route = routing_table_find(ipv4->destination_ip);
                 
                 // 라우팅 테이블에 적힌 올바른 인터페이스로 전송

@@ -3,8 +3,22 @@
 
 #include <string>
 #include <cstdint>
+#include <sys/time.h>
 
-void print_debug_header(const std::string type, const std::string message);
+#define PRINT_LOG_MESSAGE(fmt, ...) do { \
+    struct timeval tv; \
+    gettimeofday(&tv, NULL); \
+    struct tm *t = localtime(&tv.tv_sec); \
+    char time_buf[20]; \
+    strftime(time_buf, sizeof(time_buf), "%H:%M:%S", t); \
+    char msg_buf[1024]; \
+    snprintf(msg_buf, sizeof(msg_buf), fmt, ##__VA_ARGS__); \
+    printf("[%s.%03ld] %s " fmt, time_buf, tv.tv_usec / 1000, msg_buf); \
+} while(0)
+
+#define DEBUG_HEADER(type, fmt, ...) \
+    printf("\n=== [%s] " fmt " ===============\n", type, ##__VA_ARGS__)
+
 int print_errno_message(const std::string& header);
 void print_packet_info(char* msg, char* buffer);
 
