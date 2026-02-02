@@ -11,9 +11,7 @@
     struct tm *t = localtime(&tv.tv_sec); \
     char time_buf[20]; \
     strftime(time_buf, sizeof(time_buf), "%H:%M:%S", t); \
-    char msg_buf[1024]; \
-    snprintf(msg_buf, sizeof(msg_buf), fmt, ##__VA_ARGS__); \
-    printf("[%s.%03ld] %s " fmt, time_buf, tv.tv_usec / 1000, msg_buf); \
+    printf("[%s.%03ld] " fmt, time_buf, tv.tv_usec / 1000, ##__VA_ARGS__); \
 } while(0)
 
 #define DEBUG_HEADER(type, fmt, ...) \

@@ -122,12 +122,12 @@ bool ipv4_packet_drop_check(IPV4_HEADER* ipv4_packet){
                     (htonl(ipv4_packet->source_ip) >> 24) & 0xFF,
                     (htonl(ipv4_packet->source_ip) >> 16) & 0xFF,
                     (htonl(ipv4_packet->source_ip) >>  8) & 0xFF,
-                        htonl(ipv4_packet->source_ip)        & 0xFF,
+                        htonl(ipv4_packet->source_ip)     & 0xFF,
 
                     (htonl(ipv4_packet->destination_ip) >> 24) & 0xFF,
                     (htonl(ipv4_packet->destination_ip) >> 16) & 0xFF,
                     (htonl(ipv4_packet->destination_ip) >>  8) & 0xFF,
-                        htonl(ipv4_packet->destination_ip)        & 0xFF
+                        htonl(ipv4_packet->destination_ip)     & 0xFF
                 );
             }
         }

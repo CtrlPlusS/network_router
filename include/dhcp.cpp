@@ -16,10 +16,10 @@ void init_dhcp_table(){
 
 uint16_t allocate_ip_num(){
     auto& info = router_info::instance();
-    for(int i = 2; i <= 254; ++i){
-        if(!info.allocated_dhcp_ip_table[i - 2].first){
-            info.allocated_dhcp_ip_table[i - 2].first = true;
-            info.allocated_dhcp_ip_table[i - 2].second = time(NULL) + info.dhcp_offering_time;
+    for(int i = info.dhcp_ip_start_num; i <= info.dhcp_ip_end_num; ++i){
+        if(!info.allocated_dhcp_ip_table[i - info.dhcp_ip_start_num].first){
+            info.allocated_dhcp_ip_table[i - info.dhcp_ip_start_num].first = true;
+            info.allocated_dhcp_ip_table[i - info.dhcp_ip_start_num].second = time(NULL) + info.dhcp_offering_time;
             return i;
         }
     }
@@ -30,8 +30,8 @@ void refresh_dhcp_entries(){
     auto& info = router_info::instance();
     time_t now = time(NULL);
     for(int i = info.dhcp_ip_start_num; i <= info.dhcp_ip_end_num; ++i){
-        if(info.allocated_dhcp_ip_table[i - 2].first && info.allocated_dhcp_ip_table[i - 2].second > now){
-            info.allocated_dhcp_ip_table[i - 2].first = false;
+        if(info.allocated_dhcp_ip_table[i - info.dhcp_ip_start_num].first && info.allocated_dhcp_ip_table[i - info.dhcp_ip_start_num].second > now){
+            info.allocated_dhcp_ip_table[i - info.dhcp_ip_start_num].first = false;
         }
     }
 }
@@ -57,7 +57,7 @@ int dhcp_discover_handler(char* buffer){
     dhcp_packet->secs = 0;
     dhcp_packet->ciaddr = inet_addr("0.0.0.0");
  
-    dhcp_packet->yiaddr = (ntohl(info.my_ipv4_lan_ip) & 0xFF'FF'FF'00) | allocated_ip_num;
+    dhcp_packet->yiaddr = (info.my_ipv4_lan_ip & 0x00FFFFFF) | (allocated_ip_num << 24);
     dhcp_packet->siaddr = info.my_ipv4_lan_ip;
     dhcp_packet->giaddr = inet_addr("0.0.0.0");
     memset(dhcp_packet->sname, 0, 64);
@@ -94,7 +94,7 @@ int dhcp_discover_handler(char* buffer){
 
     uint16_t udp_total_length = 8 + (opt - (uint8_t*)dhcp_packet);
     udp_packet->length = htons(udp_total_length);
-    udp_packet->checksum = 0;
+    udp_calculate_checksum(udp_packet, ipv4_packet);
 
     ipv4_packet->total_length = htons(20 +  udp_total_length);
     ipv4_packet->flags_fragment_offset &= 0b0000'0000'0000'0111;
@@ -127,19 +127,24 @@ int dhcp_request_handler(char* buffer){
     // 2. mac 주소가 공유기 mac(lan)이면
     // 2-1. ciaddr 확인 후 갱신. (갱신)
 
-    uint8_t requested_ip_last_byte = 0; // 못 찾으면 0
+    uint8_t allocated_ip_num = 0; // 못 찾으면 0
     bool is_renewal = (dhcp_packet->ciaddr != 0);
+
+    if(info.debug_mode_dhcp){
+        PRINT_LOG_MESSAGE("[dhcp] dhcp in. flag is %x(raw)\n", dhcp_packet->flags);
+    }
+
     bool is_broadcast = ntohs(dhcp_packet->flags) & 0x8000;
     
     if(is_renewal){
-        requested_ip_last_byte = ntohl(dhcp_packet->ciaddr) & 0xFF;
+        allocated_ip_num = ntohl(dhcp_packet->ciaddr) & 0xFF;
     }
     else{
         uint8_t* option_ptr = dhcp_packet->options;
 
         while(*option_ptr != 255 && (option_ptr - dhcp_packet->options) < 300) { // End Option(255) 만날 때까지 또는 3500바이트 초과까지(255 없는 경우)
             if(*option_ptr == 50){
-                requested_ip_last_byte = *(option_ptr + 5);
+                allocated_ip_num = *(option_ptr + 5);
                 break;
             }
             else
@@ -147,18 +152,22 @@ int dhcp_request_handler(char* buffer){
         }
     }
 
-    if (requested_ip_last_byte >= 255 || requested_ip_last_byte <= 1) {
-        requested_ip_last_byte = 2;
+    if(info.debug_mode_dhcp){
+        PRINT_LOG_MESSAGE("[dhcp] dhcp in. requesting ip is  10.0.0.%d\n", allocated_ip_num);
     }
 
-    info.allocated_dhcp_ip_table[requested_ip_last_byte - 2].first = true;
-    info.allocated_dhcp_ip_table[requested_ip_last_byte - 2].second = time(NULL) + info.dhcp_offering_time;
+    if (allocated_ip_num >= 255 || allocated_ip_num <= 1) {
+        allocated_ip_num = 2;
+    }
+
+    info.allocated_dhcp_ip_table[allocated_ip_num - 2].first = true;
+    info.allocated_dhcp_ip_table[allocated_ip_num - 2].second = time(NULL) + info.dhcp_offering_time;
 
     dhcp_packet->op = 2;
     dhcp_packet->hops = 0;
     dhcp_packet->secs = 0;
 
-    dhcp_packet->yiaddr = (ntohl(info.my_ipv4_lan_ip) & 0xFF'FF'FF'00) | requested_ip_last_byte;
+    dhcp_packet->yiaddr = (info.my_ipv4_lan_ip & 0x00FFFFFF) | (allocated_ip_num << 24);
     dhcp_packet->siaddr = info.my_ipv4_lan_ip;
     dhcp_packet->giaddr = inet_addr("0.0.0.0");
     dhcp_packet->magic_cookie = htonl(0x63825363);
@@ -188,12 +197,16 @@ int dhcp_request_handler(char* buffer){
     // Option 255: End
     *opt++ = 255;
 
+    while ((opt - (uint8_t*)dhcp_packet) < 300) {
+        *opt++ = 0; 
+    }
+
     udp_packet->source_port = htons(67);
     udp_packet->destination_port = htons(68);
 
     uint16_t udp_total_length = 8 + (opt - (uint8_t*)dhcp_packet);
     udp_packet->length = htons(udp_total_length);
-    udp_packet->checksum = 0;
+    udp_calculate_checksum(udp_packet, ipv4_packet);
 
     ipv4_packet->total_length = htons(20 +  udp_total_length);
     ipv4_packet->flags_fragment_offset &= 0b0000'0000'0000'0111;
@@ -221,7 +234,20 @@ int dhcp_request_handler(char* buffer){
     eth_packet->ethertype = htons(ETH_HEADER_CONSTANTS::ETH_P_IPV4);
 
     if(info.debug_mode_dhcp){
-        PRINT_LOG_MESSAGE("[dhcp] request packet detected. ack packet 10.0.0.%d(%d) sent.\n", requested_ip_last_byte, info.dhcp_offering_time);
+        PRINT_LOG_MESSAGE("[dhcp] request packet detected. ack packet 10.0.0.%d(%d) sent to (ip : %d.%d.%d.%d. mac : %02X:%02X:%02X:%02X:%02X:%02X)\n", 
+                allocated_ip_num,
+                info.dhcp_offering_time, 
+                (htonl(ipv4_packet->destination_ip) >> 24) & 0xFF,
+                (htonl(ipv4_packet->destination_ip) >> 16) & 0xFF,
+                (htonl(ipv4_packet->destination_ip) >>  8) & 0xFF,
+                htonl(ipv4_packet->destination_ip) & 0xFF,
+                eth_packet->destination_mac[0],
+                eth_packet->destination_mac[1],
+                eth_packet->destination_mac[2],
+                eth_packet->destination_mac[3],
+                eth_packet->destination_mac[4],
+                eth_packet->destination_mac[5]
+            );
     }
 
     return (uint8_t*)opt - (uint8_t*)buffer;

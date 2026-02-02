@@ -70,7 +70,7 @@ void init_router(){
 int main(){
     auto& info = router_info::instance();
 
-    freopen("router_log.txt", "w", stdout);
+    // freopen("router_log.txt", "w", stdout);
     // setbuf(stdout, NULL);
 
     init_router();

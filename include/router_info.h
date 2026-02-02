@@ -52,7 +52,7 @@ public:
         return info;
     }
 
-    std::string config_file_pwd = "../src/config.json"; // = "/home/konan0207/router_project/src/config.json";
+    std::string config_file_pwd = "/home/konan0207/router_project/src/config.json"; // = "/home/konan0207/router_project/src/config.json";
 
     // firewall
     std::vector<FIREWALL_TABLE_ENTRY> firewall_table;
@@ -78,8 +78,8 @@ public:
     int ICMP_TIMEOUT = 60;
 
     // arp
-    std::map<uint32_t, struct MAC_ADDRESS> arp_table;
-    std::map<uint32_t, std::queue<std::vector<char>>> pending_packets;
+    std::unordered_map<uint32_t, struct MAC_ADDRESS> arp_table;
+    std::unordered_map<uint32_t, std::queue<std::vector<char>>> pending_packets;
 
     // route
     std::vector<ROUTE_ENTRY> routing_table;

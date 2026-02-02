@@ -147,6 +147,7 @@ void router_info::load_config(){
 
     auto debug_options = data["debug"]; 
     freopen(std::string(debug_options["file_path"]).c_str(), "w", stdout);
+    setbuf(stdout, NULL);
     debug_mode_core = debug_options["categories"]["core"];
     debug_mode_traffic = debug_options["categories"]["traffic"];
     debug_mode_nat = debug_options["categories"]["nat"];

@@ -1,20 +1,20 @@
 {
     "wifi": {
         "ssid": "test",
-        "password": "123456789",
+        "password": "12345678",
         "channel": 7,
         "country_code": "US"
     },
 
     "debug": {
-        "save_to_file": false,
-        "file_path": "../log/router.log",
+        "save_to_file": true,
+        "file_path": "/home/konan0207/router_project/log/router.log",
         "categories": {
-          "core": false, 
-          "traffic": true,
+          "core": true, 
+          "traffic": false,
           "nat": false,
           "dhcp": true,
-          "security": true
+          "security": false
         }
     },
 
