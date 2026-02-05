@@ -85,7 +85,7 @@ public:
     std::vector<ROUTE_ENTRY> routing_table;
 
     // dhcp
-    std::pair<bool, time_t> allocated_dhcp_ip_table[253];
+    std::vector<std::pair<bool, time_t>> allocated_dhcp_ip_table;
     
     uint8_t dhcp_ip_start_num = 2;
     uint8_t dhcp_ip_end_num = 254;
@@ -114,7 +114,8 @@ public:
 
     void init_router_info();
     void load_config();
-
+    void load_debug_config();
+    void load_wifi_config();
 private:
     std::string exec_command(const char* command);
     void get_lan_info(int sock);

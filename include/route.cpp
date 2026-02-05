@@ -63,4 +63,7 @@ struct ROUTE_ENTRY routing_table_find(uint32_t src) {
             return entry;
         }
     }
+
+    // 못찾음
+    return router_info::instance().routing_table.back();
 }

@@ -31,9 +31,9 @@ int print_errno_message(const string& header){
 * @brief Print Ethernet and ARP packet information from buffer
 * @param buffer 패킷 데이터가 담긴 버퍼
  */
-void print_packet_info(char* msg, char* buffer) {
+void print_packet_info(string msg, char* buffer) {
 
-    PRINT_LOG_MESSAGE("%s\n", msg);
+    PRINT_LOG_MESSAGE("%s\n", msg.data());
     struct ETH_HEADER *eth = reinterpret_cast<struct ETH_HEADER*>(buffer);
     uint16_t ethertype = ntohs(eth->ethertype);
 
@@ -203,7 +203,8 @@ void tcp_calculate_checksum(struct TCP_HEADER *tcp, struct IPV4_HEADER *ip) {
 
 void icmp_calculate_checksum(struct ICMP_HEADER* icmp_packet, struct IPV4_HEADER* ipv4_packet){
     // checksum 재계산
-        icmp_packet->checksum = 0; // 1. 먼저 0으로 초기화 (필수)
+        icmp_packet->checksum = 0;
+        
         icmp_packet->checksum = calculate_checksum(
             (uint16_t*)icmp_packet, // 2. ICMP 헤더 시작 주소
             ntohs(ipv4_packet->total_length) - (ipv4_packet->version_ihl & 0x0F) * 4 // 3. IP 헤더를 뺀 순수 ICMP 길이

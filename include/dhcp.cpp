@@ -11,15 +11,19 @@
 #include "./common.h"
 
 void init_dhcp_table(){
-    memset(router_info::instance().allocated_dhcp_ip_table, 0, sizeof(std::pair<bool, time_t>) * 253);
+    auto& info = router_info::instance();
+    info.allocated_dhcp_ip_table = std::vector<std::pair<bool, time_t>>(info.dhcp_ip_end_num - info.dhcp_ip_start_num + 1);
+    // std::fill(router_info::instance().allocated_dhcp_ip_table.begin(),
+    //          router_info::instance().allocated_dhcp_ip_table.end(),
+    //          default_table);
 }
 
 uint16_t allocate_ip_num(){
     auto& info = router_info::instance();
     for(int i = info.dhcp_ip_start_num; i <= info.dhcp_ip_end_num; ++i){
         if(!info.allocated_dhcp_ip_table[i - info.dhcp_ip_start_num].first){
-            info.allocated_dhcp_ip_table[i - info.dhcp_ip_start_num].first = true;
-            info.allocated_dhcp_ip_table[i - info.dhcp_ip_start_num].second = time(NULL) + info.dhcp_offering_time;
+            // info.allocated_dhcp_ip_table[i - info.dhcp_ip_start_num].first = true;
+            // info.allocated_dhcp_ip_table[i - info.dhcp_ip_start_num].second = time(NULL) + info.dhcp_offering_time;
             return i;
         }
     }
@@ -29,10 +33,15 @@ uint16_t allocate_ip_num(){
 void refresh_dhcp_entries(){
     auto& info = router_info::instance();
     time_t now = time(NULL);
-    for(int i = info.dhcp_ip_start_num; i <= info.dhcp_ip_end_num; ++i){
-        if(info.allocated_dhcp_ip_table[i - info.dhcp_ip_start_num].first && info.allocated_dhcp_ip_table[i - info.dhcp_ip_start_num].second > now){
-            info.allocated_dhcp_ip_table[i - info.dhcp_ip_start_num].first = false;
-        }
+    // for(int i = info.dhcp_ip_start_num; i <= info.dhcp_ip_end_num; ++i){
+    //     if(info.allocated_dhcp_ip_table[i - info.dhcp_ip_start_num].first && info.allocated_dhcp_ip_table[i - info.dhcp_ip_start_num].second > now){
+    //         info.allocated_dhcp_ip_table[i - info.dhcp_ip_start_num].first = false;
+    //     }
+    // }
+
+    for(auto it : info.allocated_dhcp_ip_table){
+        if(it.first && it.second > now)
+            it.first = false;
     }
 }
 
@@ -51,7 +60,7 @@ int dhcp_discover_handler(char* buffer){
     }
 
     if(allocated_ip_num >= 255)
-        return 0;  
+        return 0;
     dhcp_packet->op = 2;
     dhcp_packet->hops = 0;
     dhcp_packet->secs = 0;
@@ -73,18 +82,23 @@ int dhcp_discover_handler(char* buffer){
 
     // Option 3: Router (10.0.0.1)
     *opt++ = 3; *opt++ = 4;
-    *(uint32_t*)opt = info.my_ipv4_lan_ip; opt += 4;
+    memcpy(opt, &info.my_ipv4_lan_ip, 4);
+    opt += 4;
 
     // Option 6: DNS (8.8.8.8)
     *opt++ = 6; *opt++ = 4;
-    *(uint32_t*)opt = info.dhcp_dns_server; opt += 4;
+    memcpy(opt, &info.dhcp_dns_server, 4);
+    opt += 4;
 
     // Option 54: Server ID (10.0.0.1) - 필수
     *opt++ = 54; *opt++ = 4;
-    *(uint32_t*)opt = info.my_ipv4_lan_ip; opt += 4;
+    memcpy(opt, &info.my_ipv4_lan_ip, 4);
+    opt += 4;
 
     *opt++ = 51; *opt++ = 4;
-    *(uint32_t*)opt = htonl(info.dhcp_offering_time); opt += 4;   
+    uint32_t offering_time = htonl(info.dhcp_offering_time); 
+    memcpy(opt, &offering_time, 4);
+    opt += 4;   
 
     // Option 255: End
     *opt++ = 255;
@@ -129,12 +143,12 @@ int dhcp_request_handler(char* buffer){
 
     uint8_t allocated_ip_num = 0; // 못 찾으면 0
     bool is_renewal = (dhcp_packet->ciaddr != 0);
+    bool is_broadcast = ntohs(dhcp_packet->flags) & 0x8000;
+    bool is_nak = false;
 
     if(info.debug_mode_dhcp){
         PRINT_LOG_MESSAGE("[dhcp] dhcp in. flag is %x(raw)\n", dhcp_packet->flags);
     }
-
-    bool is_broadcast = ntohs(dhcp_packet->flags) & 0x8000;
     
     if(is_renewal){
         allocated_ip_num = ntohl(dhcp_packet->ciaddr) & 0xFF;
@@ -156,12 +170,16 @@ int dhcp_request_handler(char* buffer){
         PRINT_LOG_MESSAGE("[dhcp] dhcp in. requesting ip is  10.0.0.%d\n", allocated_ip_num);
     }
 
-    if (allocated_ip_num >= 255 || allocated_ip_num <= 1) {
-        allocated_ip_num = 2;
+    if (info.dhcp_ip_start_num <= allocated_ip_num && allocated_ip_num <= info.dhcp_ip_end_num &&
+        (is_renewal || !info.allocated_dhcp_ip_table[allocated_ip_num - 2].first)) {
+        // request가 기존에 안쓰던거임 -> 그냥 바로 할당해줌
+        info.allocated_dhcp_ip_table[allocated_ip_num - info.dhcp_ip_start_num].first = true;
+        info.allocated_dhcp_ip_table[allocated_ip_num - info.dhcp_ip_start_num].second = time(NULL) + info.dhcp_offering_time;    
     }
-
-    info.allocated_dhcp_ip_table[allocated_ip_num - 2].first = true;
-    info.allocated_dhcp_ip_table[allocated_ip_num - 2].second = time(NULL) + info.dhcp_offering_time;
+    else{
+        // 기존에 쓰던 ip임 -> nak
+        is_nak = true;
+    }
 
     dhcp_packet->op = 2;
     dhcp_packet->hops = 0;
@@ -173,26 +191,34 @@ int dhcp_request_handler(char* buffer){
     dhcp_packet->magic_cookie = htonl(0x63825363);
 
     uint8_t* opt = reinterpret_cast<uint8_t*>((uint8_t*)dhcp_packet->options);
-    *opt++ = 53; *opt++ = 1; *opt++ = 5; 
-
-    // Option 1: Subnet Mask (255.255.255.0)
-    *opt++ = 1; *opt++ = 4;
-    *opt++ = 255; *opt++ = 255; *opt++ = 255; *opt++ = 0;
-
-    // Option 3: Router (10.0.0.1)
-    *opt++ = 3; *opt++ = 4;
-    *(uint32_t*)opt = info.my_ipv4_lan_ip; opt += 4;
-
-    // Option 6: DNS (8.8.8.8)
-    *opt++ = 6; *opt++ = 4;
-    *(uint32_t*)opt = info.dhcp_dns_server; opt += 4;
+    *opt++ = 53; *opt++ = 1; *opt++ = is_nak ? 6 : 5; 
 
     // Option 54: Server ID (10.0.0.1) - 필수
     *opt++ = 54; *opt++ = 4;
-    *(uint32_t*)opt = info.my_ipv4_lan_ip; opt += 4;
+    memcpy(opt, &info.my_ipv4_lan_ip, 4);
+    opt += 4;
 
-    *opt++ = 51; *opt++ = 4;
-    *(uint32_t*)opt = htonl(info.dhcp_offering_time); opt += 4;   
+    if(!is_nak){
+        // Option 1: Subnet Mask (255.255.255.0)
+        *opt++ = 1; *opt++ = 4;
+        *opt++ = 255; *opt++ = 255; *opt++ = 255; *opt++ = 0;
+
+        // Option 3: Router (10.0.0.1)
+        *opt++ = 3; *opt++ = 4;
+        memcpy(opt, &info.my_ipv4_lan_ip, 4);
+        opt += 4;
+
+        // Option 6: DNS (8.8.8.8)
+        *opt++ = 6; *opt++ = 4;
+        *(uint32_t*)opt = info.dhcp_dns_server;
+        memcpy(opt, &info.dhcp_dns_server, 4);
+        opt += 4;
+
+        *opt++ = 51; *opt++ = 4;
+        uint32_t offering_time = htonl(info.dhcp_offering_time); 
+        memcpy(opt, &offering_time, 4);
+        opt += 4;   
+    }
 
     // Option 255: End
     *opt++ = 255;

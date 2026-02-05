@@ -1,7 +1,7 @@
 {
     "wifi": {
         "ssid": "test",
-        "password": "12345678",
+        "password": "11111111",
         "channel": 7,
         "country_code": "US"
     },
@@ -14,7 +14,7 @@
           "traffic": false,
           "nat": false,
           "dhcp": true,
-          "security": false
+          "security": true
         }
     },
 
@@ -32,7 +32,7 @@
     },
 
     "firewall": {
-        "default_policy": "ACCEPT",
+        "default_policy": 0,
         "block_list": ["10.0.0.4"]
     }
 }

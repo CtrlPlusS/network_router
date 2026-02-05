@@ -15,15 +15,6 @@ void init_firewall_table(){
     //     .destination_port = 0,
     //     .action = FIREWALL_ACTION_CONSTANTS::REJECT
     // });
-
-    create_firewall_entry({
-        .source_ip = 0,
-        .destination_ip = 0,
-        .protocol = 0,
-        .source_port = 0,
-        .destination_port = 0,
-        .action = FIREWALL_ACTION_CONSTANTS::ACCEPT
-    });
 }
 
 bool check_entry (FIREWALL_TABLE_ENTRY* condition, FIREWALL_TABLE_ENTRY* entry){
@@ -63,35 +54,38 @@ uint8_t find_firewall_entry(FIREWALL_TABLE_ENTRY entry){
 uint8_t firewall_icmp_packet_find(IPV4_HEADER* ipv4_packet){
     ICMP_HEADER* icmp_packet = reinterpret_cast<ICMP_HEADER*>((uint8_t*)ipv4_packet + (ipv4_packet->version_ihl & 0x0F) * 4);
 
-    return find_firewall_entry({
+    FIREWALL_TABLE_ENTRY entry = {
         .source_ip = ipv4_packet->source_ip,
         .destination_ip = ipv4_packet->destination_ip,
         .protocol = ipv4_packet->protocol,
         .source_port = icmp_packet->identifier,
         .destination_port = icmp_packet->identifier
-    });
+    };
+    return find_firewall_entry(entry);
 }
 
 uint8_t firewall_tcp_packet_find(IPV4_HEADER* ipv4_packet){
     TCP_HEADER* tcp_packet = reinterpret_cast<TCP_HEADER*>((uint8_t*)ipv4_packet + (ipv4_packet->version_ihl & 0x0F) * 4);
 
-    return find_firewall_entry({
+    FIREWALL_TABLE_ENTRY entry = {
         .source_ip = ipv4_packet->source_ip,
         .destination_ip = ipv4_packet->destination_ip,
         .protocol = ipv4_packet->protocol,
         .source_port = tcp_packet->source_port,
         .destination_port = tcp_packet->destination_port
-    });
+    };
+    return find_firewall_entry(entry);
 }
 
 uint8_t firewall_udp_packet_find(IPV4_HEADER* ipv4_packet){
     UDP_HEADER* udp_packet = reinterpret_cast<UDP_HEADER*>((uint8_t*)ipv4_packet + (ipv4_packet->version_ihl & 0x0F) * 4);
 
-    return find_firewall_entry({
+    FIREWALL_TABLE_ENTRY entry = {
         .source_ip = ipv4_packet->source_ip,
         .destination_ip = ipv4_packet->destination_ip,
         .protocol = ipv4_packet->protocol,
         .source_port = udp_packet->source_port,
         .destination_port = udp_packet->destination_port
-    });
+    };
+    return find_firewall_entry(entry);
 }

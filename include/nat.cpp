@@ -179,8 +179,8 @@ bool nat_inbound_handler(struct IPV4_HEADER* ipv4_packet){
     // nat장부에 있으면 true, 아니면 false
     auto& info = router_info::instance();
 
-    uint32_t dst_ip = ipv4_packet->destination_ip;
-    uint16_t dst_port;
+    // uint32_t dst_ip = ipv4_packet->destination_ip;
+    // uint16_t dst_port;
 
     switch(ipv4_packet->protocol){
         case IPV4_HEADER_PROTOCOL_CONSTANTS::TCP_PROTOCOL:{

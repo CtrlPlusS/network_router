@@ -18,7 +18,7 @@
     printf("\n=== [%s] " fmt " ===============\n", type, ##__VA_ARGS__)
 
 int print_errno_message(const std::string& header);
-void print_packet_info(char* msg, char* buffer);
+void print_packet_info(std::string msg, char* buffer);
 
 uint32_t sum_1s_complement(uint16_t *buf, int len);
 uint16_t finalize_checksum(uint32_t sum);

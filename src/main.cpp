@@ -23,7 +23,7 @@
 #include "./dhcp.h"
 
 void emergency_flush(int signum){
-    printf("\n[system] program crashed. signum : %d\n", signum);
+    PRINT_LOG_MESSAGE("[system] program crashed. signum : %d\n", signum);
     fflush(stdout);
     exit(signum);
 }
@@ -60,7 +60,12 @@ void init_router(){
     // 방화벽 테이블 초기화
     init_firewall_table();
 
+    // dhcp 테이블 초기화
     init_dhcp_table();
+
+    // 와이파이
+    // /etc/hostapd/hostapd.conf 파일 내용 수정
+    info.load_wifi_config();
 
     if(info.debug_mode_core){
         PRINT_LOG_MESSAGE("[core] router setting done.\n");
@@ -100,9 +105,10 @@ int main(){
     
     while(true){
         time_t current_time = time(NULL);
-        if (current_time - last_cleanup_time >= 1) {
+        if (current_time - last_cleanup_time >= 10) {
             cleanup_expired_nat_entries();
             refresh_dhcp_entries();
+            info.load_debug_config();
             last_cleanup_time = current_time;
         }
 

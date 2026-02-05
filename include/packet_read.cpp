@@ -115,31 +115,28 @@ bool ipv4_packet_drop_check(IPV4_HEADER* ipv4_packet){
             firewall_check = false;
     }
 
-    switch(firewall_check){
-        case FIREWALL_ACTION_CONSTANTS::REJECT:{
-            if(info.debug_mode_security){
-                PRINT_LOG_MESSAGE("[security] packet %d.%d.%d.%d -> %d.%d.%d.%d rejected.\n",
-                    (htonl(ipv4_packet->source_ip) >> 24) & 0xFF,
-                    (htonl(ipv4_packet->source_ip) >> 16) & 0xFF,
-                    (htonl(ipv4_packet->source_ip) >>  8) & 0xFF,
-                        htonl(ipv4_packet->source_ip)     & 0xFF,
+    if(firewall_check == FIREWALL_ACTION_CONSTANTS::ACCEPT)
+        return false;
 
-                    (htonl(ipv4_packet->destination_ip) >> 24) & 0xFF,
-                    (htonl(ipv4_packet->destination_ip) >> 16) & 0xFF,
-                    (htonl(ipv4_packet->destination_ip) >>  8) & 0xFF,
-                        htonl(ipv4_packet->destination_ip)     & 0xFF
-                );
-            }
-        }
-        
-        case FIREWALL_ACTION_CONSTANTS::DROP:{
-            return true;
-        }
+    // reject + drop
+    if(firewall_check == FIREWALL_ACTION_CONSTANTS::REJECT){
+        if(info.debug_mode_security){
+            PRINT_LOG_MESSAGE("[security] packet %d.%d.%d.%d -> %d.%d.%d.%d rejected.\n",
+                (htonl(ipv4_packet->source_ip) >> 24) & 0xFF,
+                (htonl(ipv4_packet->source_ip) >> 16) & 0xFF,
+                (htonl(ipv4_packet->source_ip) >>  8) & 0xFF,
+                    htonl(ipv4_packet->source_ip)     & 0xFF,
 
-        default:;
+                (htonl(ipv4_packet->destination_ip) >> 24) & 0xFF,
+                (htonl(ipv4_packet->destination_ip) >> 16) & 0xFF,
+                (htonl(ipv4_packet->destination_ip) >>  8) & 0xFF,
+                    htonl(ipv4_packet->destination_ip)     & 0xFF
+            );
+        }
     }
 
-    return false;
+    //drop
+    return true;
 }
 
 uint32_t ipv4_read_handler(char* buffer, int sock, int if_index){
@@ -207,6 +204,7 @@ uint32_t ipv4_read_handler(char* buffer, int sock, int if_index){
 }
 
 uint32_t arp_read_handler(char* buffer, int sock, int if_index){
+    struct ETH_HEADER *eth = reinterpret_cast<struct ETH_HEADER*>(buffer);
     struct ARP_HEADER *arp = reinterpret_cast<struct ARP_HEADER*>(buffer + sizeof(struct ETH_HEADER));
     auto& info = router_info::instance();
     uint32_t dest_ip = 0;
@@ -224,6 +222,8 @@ uint32_t arp_read_handler(char* buffer, int sock, int if_index){
 
                 memcpy(arp->tha, arp->sha, 6); // 대상 MAC 주소에 송신자 MAC 주소 복사
                 memcpy(arp->tpa, arp->spa, 4); // 대상 IP 주소
+
+                memcpy(eth->destination_mac, eth->source_mac, 6);
 
                 if(is_request_for_lan){
                     // LAN에서 온 요청이면 -> 내 LAN 정보로 답장
@@ -256,7 +256,6 @@ uint32_t arp_read_handler(char* buffer, int sock, int if_index){
             info.arp_table[*(uint32_t*)arp->spa] = *(struct MAC_ADDRESS*)arp->sha;
         }
     }
-
  
     return dest_ip;
 }
