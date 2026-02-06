@@ -8,8 +8,11 @@
 
 #include "./router_info.h"
 #include "./common.h"
+#include "./nat.h"
 #include "./packets.h"
 #include "./firewall.h"
+
+#include "json.hpp"
 
 std::string router_info::exec_command(const char* command){
     FILE *fp;
@@ -161,12 +164,35 @@ void router_info::load_config(){
     UDP_TIMEOUT = nat_options["udp_timeout"];
     ICMP_TIMEOUT = nat_options["icmp_timeout"];
 
+    //port forward
+    auto port_forward_options = data["port_forward"];
+    for(auto forward_entry : port_forward_options){
+        struct NAT_TABLE_ENTRY entry = {};
+        entry.ip = inet_addr(forward_entry["internal_ip"].get<std::string>().c_str());
+        entry.internal_port = forward_entry["internal_port"].get<uint16_t>();
+        entry.external_port = forward_entry["external_port"].get<uint16_t>();
+        entry.protocol = forward_entry["protocol"];
+        entry.last_updated = 0;
+
+        uint64_t key = make_nat_key(entry.ip, entry.internal_port, entry.protocol);
+        wan_to_lan_table[entry.protocol << 16 | entry.external_port] = entry;
+        lan_to_wan_table[key] = entry;
+        if(debug_mode_nat){
+            PRINT_LOG_MESSAGE("[nat] adding new inbound session  %d(lan) - %d(wan) \n", entry.internal_port, entry.external_port);
+        }
+    }
+
     // dhcp
     auto dhcp_options = data["dhcp"];
     dhcp_ip_start_num = dhcp_options["range_start"];
     dhcp_ip_end_num = dhcp_options["range_end"];
     dhcp_offering_time = dhcp_options["lease_time"];
-    dhcp_dns_server = inet_addr(std::string(dhcp_options["dns_server"]).c_str());
+    dhcp_dns_server = inet_addr(dhcp_options["dns_server"].get<std::string>().c_str());
+    for(auto dhcp_static_ip_entry : dhcp_options["static_ip"]){
+        std::string entry_mac = dhcp_static_ip_entry["mac"].get<std::string>();
+        int entry_ip = dhcp_static_ip_entry["ip_num"].get<int>();
+        static_ip_table[entry_mac] = entry_ip;
+    }
 
     // 방화벽
     auto firewall_options = data["firewall"];

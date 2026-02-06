@@ -24,11 +24,21 @@
         "icmp_timeout": 60
     },
 
+    "port_forward": [
+        { "internal_ip": "10.0.0.2", "internal_port": 3000, "external_port": 60000, "protocol": 6 },
+        { "internal_ip": "10.0.0.3", "internal_port": 3000, "external_port": 60001, "protocol": 6 },
+        { "internal_ip": "10.0.0.4", "internal_port": 3000, "external_port": 60002, "protocol": 6 }
+    ],
+
     "dhcp": {
-        "range_start": 2,
+        "range_start": 11,
         "range_end": 254,
         "lease_time": 3600,
-        "dns_server": "8.8.8.8"
+        "dns_server": "8.8.8.8",
+        "static_ip" : [
+            {"mac": "52:9E:DB:F9:C6:56", "ip_num": 2},
+            {"mac": "D2:6D:17:BC:5F:52", "ip_num": 3}
+        ]
     },
 
     "firewall": {

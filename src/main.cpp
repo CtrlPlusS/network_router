@@ -22,6 +22,42 @@
 #include "./firewall.h"
 #include "./dhcp.h"
 
+void dump_nat_table() {
+    auto& info = router_info::instance();
+    PRINT_LOG_MESSAGE("==================== [NAT Table] ====================\n");
+    PRINT_LOG_MESSAGE("%-8s | %-15s | %-18s | %-15s\n", "Proto", "Ext Port(WAN)", "Int IP(LAN)", "Int Port");
+    PRINT_LOG_MESSAGE("----------------------------------------------------------\n");
+
+    if (info.wan_to_lan_table.empty()) {
+        PRINT_LOG_MESSAGE(" (Empty) - No port forwarding rules defined.\n");
+    }
+
+    for (const auto& pair : info.wan_to_lan_table) {
+        uint32_t key = pair.first;
+        NAT_TABLE_ENTRY entry = pair.second;
+
+        // 1. 프로토콜 이름 변환
+        const char* proto_str = "UNKNOWN";
+        if (entry.protocol == 6) proto_str = "TCP";
+        else if (entry.protocol == 17) proto_str = "UDP";
+        else if (entry.protocol == 1) proto_str = "ICMP";
+
+        // 2. IP 주소 변환
+        struct in_addr ip_addr;
+        ip_addr.s_addr = entry.ip; // entry.ip는 이미 네트워크 바이트 순서
+
+        // 3. 포트 변환 (htons로 저장되어 있으므로 ntohs로 풀어야 사람이 읽음)
+        uint16_t ext_port = entry.external_port;
+        uint16_t int_port = entry.internal_port;
+
+        // 4. 출력
+        // Key 검증용: (key & 0xFFFF)가 ext_port와 같은지 확인해보세요.
+        PRINT_LOG_MESSAGE("%-8s | %-15d | %-18s | %-15d\n", 
+               proto_str, ext_port, inet_ntoa(ip_addr), int_port);
+    }
+    PRINT_LOG_MESSAGE("==========================================================\n");
+}
+
 void emergency_flush(int signum){
     PRINT_LOG_MESSAGE("[system] program crashed. signum : %d\n", signum);
     fflush(stdout);
@@ -35,6 +71,12 @@ void init_router(){
     signal(SIGSEGV, emergency_flush); // Segfault
     signal(SIGTERM, emergency_flush); // kill
     signal(SIGABRT, emergency_flush); // assert
+
+    // NAT 테이블 초기화
+    init_nat_table();
+
+    // dhcp 테이블 초기화
+    init_dhcp_table();
 
     // 라우터 정보 초기화
     info.load_config();
@@ -53,15 +95,9 @@ void init_router(){
 
     // MAC 주소 초기화
     init_mac_address();
-
-    // NAT 테이블 초기화
-    init_nat_table();
-
+    
     // 방화벽 테이블 초기화
     init_firewall_table();
-
-    // dhcp 테이블 초기화
-    init_dhcp_table();
 
     // 와이파이
     // /etc/hostapd/hostapd.conf 파일 내용 수정
@@ -106,6 +142,9 @@ int main(){
     while(true){
         time_t current_time = time(NULL);
         if (current_time - last_cleanup_time >= 10) {
+            if(info.debug_mode_nat){
+                dump_nat_table();
+            }
             cleanup_expired_nat_entries();
             refresh_dhcp_entries();
             info.load_debug_config();

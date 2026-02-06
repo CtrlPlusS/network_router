@@ -10,6 +10,8 @@ void init_nat_table();
 
 bool is_lan_ip( uint32_t ip_address);
 
+uint64_t make_nat_key(uint32_t ip, uint16_t port, uint8_t protocol);
+
 uint16_t allocate_tcp_port();
 uint16_t allocate_udp_port();
 uint16_t allocate_icmp_port();

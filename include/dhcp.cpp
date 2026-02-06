@@ -12,18 +12,34 @@
 
 void init_dhcp_table(){
     auto& info = router_info::instance();
-    info.allocated_dhcp_ip_table = std::vector<std::pair<bool, time_t>>(info.dhcp_ip_end_num - info.dhcp_ip_start_num + 1);
+    info.allocated_dhcp_ip_table = std::vector<std::pair<bool, time_t>>(256);
+    info.static_ip_table.clear();
     // std::fill(router_info::instance().allocated_dhcp_ip_table.begin(),
     //          router_info::instance().allocated_dhcp_ip_table.end(),
     //          default_table);
 }
 
-uint16_t allocate_ip_num(){
+uint16_t allocate_ip_num(std::string mac){
     auto& info = router_info::instance();
+
+    if(info.debug_mode_dhcp){
+        PRINT_LOG_MESSAGE("[dhcp] mac in - %s\n", mac.data());
+    }
+    
+    auto it = info.static_ip_table.find(mac);
+    if(it != info.static_ip_table.end()){
+        if(info.debug_mode_dhcp) {
+            PRINT_LOG_MESSAGE("[dhcp] STATIC IP FOUND! MAC: %s -> Num: %d\n", mac.c_str(), it->second);
+        }
+        return it->second;        
+    }
+    if(info.debug_mode_dhcp) {
+        PRINT_LOG_MESSAGE("[dhcp] Static IP NOT found for MAC: %s. Total table size: %lu\n", 
+                           mac.c_str(), info.static_ip_table.size());
+    }
+
     for(int i = info.dhcp_ip_start_num; i <= info.dhcp_ip_end_num; ++i){
         if(!info.allocated_dhcp_ip_table[i - info.dhcp_ip_start_num].first){
-            // info.allocated_dhcp_ip_table[i - info.dhcp_ip_start_num].first = true;
-            // info.allocated_dhcp_ip_table[i - info.dhcp_ip_start_num].second = time(NULL) + info.dhcp_offering_time;
             return i;
         }
     }
@@ -33,11 +49,6 @@ uint16_t allocate_ip_num(){
 void refresh_dhcp_entries(){
     auto& info = router_info::instance();
     time_t now = time(NULL);
-    // for(int i = info.dhcp_ip_start_num; i <= info.dhcp_ip_end_num; ++i){
-    //     if(info.allocated_dhcp_ip_table[i - info.dhcp_ip_start_num].first && info.allocated_dhcp_ip_table[i - info.dhcp_ip_start_num].second > now){
-    //         info.allocated_dhcp_ip_table[i - info.dhcp_ip_start_num].first = false;
-    //     }
-    // }
 
     for(auto it : info.allocated_dhcp_ip_table){
         if(it.first && it.second > now)
@@ -53,7 +64,13 @@ int dhcp_discover_handler(char* buffer){
     struct UDP_HEADER* udp_packet = reinterpret_cast<UDP_HEADER*>((uint8_t*)ipv4_packet + (ipv4_packet->version_ihl & 0x0F) * 4);
     struct DHCP_HEADER* dhcp_packet = reinterpret_cast<DHCP_HEADER*>((uint8_t*)udp_packet + sizeof(struct UDP_HEADER));
 
-    uint16_t allocated_ip_num = allocate_ip_num();
+    char mac_buf[18];
+    snprintf(mac_buf, sizeof(mac_buf), "%02X:%02X:%02X:%02X:%02X:%02X",
+         dhcp_packet->chaddr[0], dhcp_packet->chaddr[1], dhcp_packet->chaddr[2],
+         dhcp_packet->chaddr[3], dhcp_packet->chaddr[4], dhcp_packet->chaddr[5]);
+    std::string mac_str = mac_buf;    
+
+    uint16_t allocated_ip_num = allocate_ip_num(mac_str);
 
     if(info.debug_mode_dhcp){
         PRINT_LOG_MESSAGE("[dhcp] discover packet discovered. offering 10.0.0.%d\n", allocated_ip_num);
@@ -65,7 +82,7 @@ int dhcp_discover_handler(char* buffer){
     dhcp_packet->hops = 0;
     dhcp_packet->secs = 0;
     dhcp_packet->ciaddr = inet_addr("0.0.0.0");
- 
+    
     dhcp_packet->yiaddr = (info.my_ipv4_lan_ip & 0x00FFFFFF) | (allocated_ip_num << 24);
     dhcp_packet->siaddr = info.my_ipv4_lan_ip;
     dhcp_packet->giaddr = inet_addr("0.0.0.0");
@@ -108,7 +125,6 @@ int dhcp_discover_handler(char* buffer){
 
     uint16_t udp_total_length = 8 + (opt - (uint8_t*)dhcp_packet);
     udp_packet->length = htons(udp_total_length);
-    udp_calculate_checksum(udp_packet, ipv4_packet);
 
     ipv4_packet->total_length = htons(20 +  udp_total_length);
     ipv4_packet->flags_fragment_offset &= 0b0000'0000'0000'0111;
@@ -122,6 +138,8 @@ int dhcp_discover_handler(char* buffer){
     memcpy((MAC_ADDRESS*)eth_packet->source_mac, &info.my_mac_lan, 6);
     memset(eth_packet->destination_mac, 0xFF, 6);
     eth_packet->ethertype = htons(ETH_HEADER_CONSTANTS::ETH_P_IPV4);
+
+    udp_calculate_checksum(udp_packet, ipv4_packet);
 
     return (uint8_t*)opt - (uint8_t*)buffer;
 }
@@ -141,7 +159,7 @@ int dhcp_request_handler(char* buffer){
     // 2. mac 주소가 공유기 mac(lan)이면
     // 2-1. ciaddr 확인 후 갱신. (갱신)
 
-    uint8_t allocated_ip_num = 0; // 못 찾으면 0
+    uint16_t allocated_ip_num = 0; // 못 찾으면 0
     bool is_renewal = (dhcp_packet->ciaddr != 0);
     bool is_broadcast = ntohs(dhcp_packet->flags) & 0x8000;
     bool is_nak = false;
@@ -170,11 +188,10 @@ int dhcp_request_handler(char* buffer){
         PRINT_LOG_MESSAGE("[dhcp] dhcp in. requesting ip is  10.0.0.%d\n", allocated_ip_num);
     }
 
-    if (info.dhcp_ip_start_num <= allocated_ip_num && allocated_ip_num <= info.dhcp_ip_end_num &&
-        (is_renewal || !info.allocated_dhcp_ip_table[allocated_ip_num - 2].first)) {
+    if (allocated_ip_num < 256 && (is_renewal || !info.allocated_dhcp_ip_table[allocated_ip_num].first)) {
         // request가 기존에 안쓰던거임 -> 그냥 바로 할당해줌
-        info.allocated_dhcp_ip_table[allocated_ip_num - info.dhcp_ip_start_num].first = true;
-        info.allocated_dhcp_ip_table[allocated_ip_num - info.dhcp_ip_start_num].second = time(NULL) + info.dhcp_offering_time;    
+        info.allocated_dhcp_ip_table[allocated_ip_num].first = true;
+        info.allocated_dhcp_ip_table[allocated_ip_num].second = time(NULL) + info.dhcp_offering_time;    
     }
     else{
         // 기존에 쓰던 ip임 -> nak
@@ -232,7 +249,6 @@ int dhcp_request_handler(char* buffer){
 
     uint16_t udp_total_length = 8 + (opt - (uint8_t*)dhcp_packet);
     udp_packet->length = htons(udp_total_length);
-    udp_calculate_checksum(udp_packet, ipv4_packet);
 
     ipv4_packet->total_length = htons(20 +  udp_total_length);
     ipv4_packet->flags_fragment_offset &= 0b0000'0000'0000'0111;
@@ -248,16 +264,19 @@ int dhcp_request_handler(char* buffer){
     ipv4_packet->source_ip = info.my_ipv4_lan_ip;
     ipv4_packet->header_checksum = calculate_checksum((uint16_t*)ipv4_packet, 20);
 
-    if(is_renewal && !is_broadcast){
-        memcpy(eth_packet->destination_mac, eth_packet->source_mac, 6);
-    }
-    else{
-        memset(eth_packet->destination_mac, 0xFF, 6);
-    }
+    memcpy(eth_packet->destination_mac, eth_packet->source_mac, 6);
+    // if(is_renewal && !is_broadcast){
+    //     memcpy(eth_packet->destination_mac, eth_packet->source_mac, 6);
+    // }
+    // else{
+    //     memset(eth_packet->destination_mac, 0xFF, 6);
+    // }
 
     info.arp_table[dhcp_packet->yiaddr] = *(MAC_ADDRESS*)eth_packet->source_mac;
     memcpy((MAC_ADDRESS*)eth_packet->source_mac, &info.my_mac_lan, 6);
     eth_packet->ethertype = htons(ETH_HEADER_CONSTANTS::ETH_P_IPV4);
+
+    udp_calculate_checksum(udp_packet, ipv4_packet);
 
     if(info.debug_mode_dhcp){
         PRINT_LOG_MESSAGE("[dhcp] request packet detected. ack packet 10.0.0.%d(%d) sent to (ip : %d.%d.%d.%d. mac : %02X:%02X:%02X:%02X:%02X:%02X)\n", 

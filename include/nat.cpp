@@ -117,6 +117,12 @@ void cleanup_expired_nat_entries() {
     
     while (it != info.wan_to_lan_table.end()) {
         struct NAT_TABLE_ENTRY entry = it->second;
+        if(entry.last_updated == 0){
+            // 포트포워딩 작업된것
+            ++it;
+            continue;
+        }
+
         double diff = difftime(current_time, entry.last_updated);
         
         int timeout_limit = 1000000;
